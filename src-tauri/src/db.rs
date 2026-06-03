@@ -203,9 +203,9 @@ impl BancoDados {
                 cpf                       TEXT,
                 nome                      TEXT    NOT NULL,
                 data_exame                TEXT    NOT NULL,
-                idade                     INTEGER,
-                sexo                      TEXT,
-                polipo                    INTEGER,
+                idade                     INTEGER CHECK (idade >= 0),
+                sexo                      TEXT CHECK (sexo IN ('M', 'F')),
+                polipo                    INTEGER CHECK (polipo >= 0),
                 resultado_histopatologico TEXT,
                 indicacao_exame           TEXT    NOT NULL DEFAULT 'Rastreio'
             )",
@@ -259,8 +259,8 @@ impl BancoDados {
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 paciente_id       INTEGER NOT NULL,
                 parentesco        TEXT    NOT NULL,
-                grau              INTEGER NOT NULL,
-                idade_diagnostico INTEGER,
+                grau              INTEGER NOT NULL CHECK (grau IN (1, 2, 3)),
+                idade_diagnostico INTEGER CHECK (idade_diagnostico >= 0),
                 FOREIGN KEY (paciente_id)
                     REFERENCES pacientes(id) ON DELETE CASCADE
             )",
@@ -1869,6 +1869,69 @@ mod tests {
         let resultados_all = db.buscar_por_termo("joão").unwrap();
         assert_eq!(resultados_all.len(), 1);
         assert_eq!(resultados_all[0].nome, "João Silva");
+        
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_sqlite_check_constraints() {
+        let path = temp_db_path("gastroepi_test_constraints.db");
+        let db = BancoDados::new(&path);
+        db.criar().unwrap();
+        
+        let conn = obter_conexao(&path).unwrap();
+        
+        // 1. Idade negativa deve falhar
+        let res_idade = conn.execute(
+            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
+             VALUES ('111', NULL, 'Test', '2026-06-03', -5, 'M', 0, NULL, 'Rastreio')",
+            []
+        );
+        assert!(res_idade.is_err());
+        assert!(res_idade.err().unwrap().to_string().contains("CHECK constraint failed"));
+        
+        // 2. Sexo inválido deve falhar
+        let res_sexo = conn.execute(
+            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
+             VALUES ('222', NULL, 'Test', '2026-06-03', 30, 'X', 0, NULL, 'Rastreio')",
+            []
+        );
+        assert!(res_sexo.is_err());
+        assert!(res_sexo.err().unwrap().to_string().contains("CHECK constraint failed"));
+        
+        // 3. Pólipo negativo deve falhar
+        let res_polipo = conn.execute(
+            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
+             VALUES ('333', NULL, 'Test', '2026-06-03', 30, 'M', -1, NULL, 'Rastreio')",
+            []
+        );
+        assert!(res_polipo.is_err());
+        assert!(res_polipo.err().unwrap().to_string().contains("CHECK constraint failed"));
+
+        // Insere um paciente válido para testar histórico familiar
+        conn.execute(
+            "INSERT INTO pacientes (id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
+             VALUES (1, '444', NULL, 'Valid', '2026-06-03', 30, 'F', 0, NULL, 'Rastreio')",
+            []
+        ).unwrap();
+        
+        // 4. Grau inválido (não 1, 2 ou 3) deve falhar
+        let res_grau = conn.execute(
+            "INSERT INTO historico_familiar (paciente_id, parentesco, grau, idade_diagnostico) \
+             VALUES (1, 'Tio', 4, 50)",
+            []
+        );
+        assert!(res_grau.is_err());
+        assert!(res_grau.err().unwrap().to_string().contains("CHECK constraint failed"));
+
+        // 5. Idade de diagnóstico negativa deve falhar
+        let res_idade_diag = conn.execute(
+            "INSERT INTO historico_familiar (paciente_id, parentesco, grau, idade_diagnostico) \
+             VALUES (1, 'Mãe', 1, -10)",
+            []
+        );
+        assert!(res_idade_diag.is_err());
+        assert!(res_idade_diag.err().unwrap().to_string().contains("CHECK constraint failed"));
         
         let _ = fs::remove_file(&path);
     }
