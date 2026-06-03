@@ -150,9 +150,65 @@ pub fn validar_canario(cofre: &Cofre, token: &str) -> bool {
     }
 }
 
+/// Calcula o hash da entrada de auditoria atual concatenando os campos com \x00 (NUL) e aplicando SHA-256.
+pub fn calcular_hash_auditoria(
+    hash_anterior: &str,
+    timestamp: &str,
+    usuario: &str,
+    acao: &str,
+    entidade: &str,
+    entidade_id: Option<i64>,
+    snapshot_antes: Option<&str>,
+    snapshot_depois: Option<&str>,
+) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    let id_str = entidade_id.map(|id| id.to_string()).unwrap_or_default();
+    let partes = [
+        hash_anterior,
+        timestamp,
+        usuario,
+        acao,
+        entidade,
+        &id_str,
+        snapshot_antes.unwrap_or(""),
+        snapshot_depois.unwrap_or(""),
+    ];
+    let combined = partes.join("\u{0000}");
+    hasher.update(combined.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_hash_auditoria() {
+        let hash = calcular_hash_auditoria(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "2026-06-03T01:36:35Z",
+            "mateus",
+            "CADASTRAR",
+            "Paciente",
+            Some(1),
+            None,
+            Some("{\"nome\":\"João\"}"),
+        );
+        assert_eq!(hash.len(), 64);
+        // O hash deve ser determinístico
+        let hash2 = calcular_hash_auditoria(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "2026-06-03T01:36:35Z",
+            "mateus",
+            "CADASTRAR",
+            "Paciente",
+            Some(1),
+            None,
+            Some("{\"nome\":\"João\"}"),
+        );
+        assert_eq!(hash, hash2);
+    }
 
     #[test]
     fn test_kdf_derivacao() {
