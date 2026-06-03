@@ -471,6 +471,28 @@ impl BancoDados {
 
     // ──────────────────────────── Métodos de Autenticação ────────────────────────
 
+    pub fn obter_nome_usuario(&self) -> Result<Option<String>, String> {
+        let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT valor FROM metadados WHERE chave = 'nome_usuario'")
+            .map_err(|e| e.to_string())?;
+        let r = stmt.query_row([], |row| row.get::<_, String>(0));
+        match r {
+            Ok(val) => Ok(Some(val)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    pub fn definir_nome_usuario(&self, nome: &str) -> Result<(), String> {
+        let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO metadados (chave, valor) VALUES ('nome_usuario', ?1)",
+            [nome],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub fn tem_senha_configurada(&self) -> Result<bool, String> {
         let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
         let mut stmt = conn

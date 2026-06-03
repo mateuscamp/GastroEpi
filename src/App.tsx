@@ -188,12 +188,29 @@ export default function App() {
     checkSetupStatus();
   }, []);
 
+  const carregarUsuarioAtivo = async () => {
+    try {
+      const nome = await invoke<string | null>("obter_nome_usuario");
+      if (nome) {
+        setCurrentUser(nome);
+      } else {
+        await invoke("definir_nome_usuario", { nome: "Dr. Mateus" });
+        setCurrentUser("Dr. Mateus");
+      }
+    } catch (e) {
+      console.error("Erro ao carregar usuário ativo:", e);
+    }
+  };
+
   const checkSetupStatus = async () => {
     try {
       const config = await invoke<boolean>("tem_senha_configurada");
       setIsSetup(!config);
       const isUnl = await invoke<boolean>("esta_desbloqueado");
       setUnlocked(isUnl);
+      if (isUnl) {
+        await carregarUsuarioAtivo();
+      }
     } catch (e) {
       showMsg("error", "Erro ao conectar com o banco de dados: " + String(e));
     } finally {
@@ -208,9 +225,9 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100">
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-50 text-slate-900">
         <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="h-10 w-10 animate-spin text-indigo-500" />
+          <RefreshCw className="h-10 w-10 animate-spin text-indigo-650" />
           <span className="text-sm font-medium tracking-wide">Iniciando GastroEpi...</span>
         </div>
       </div>
@@ -221,14 +238,16 @@ export default function App() {
     return (
       <LockScreen
         isSetup={isSetup}
-        onUnlock={() => {
+        onUnlock={async () => {
           setUnlocked(true);
           showMsg("success", "Cofre desbloqueado com sucesso!");
+          await carregarUsuarioAtivo();
         }}
-        onSetupComplete={(_recKey) => {
+        onSetupComplete={async (_recKey) => {
           setIsSetup(false);
           setUnlocked(true);
           showMsg("success", "Senha configurada! Chave de recuperação gerada.");
+          await carregarUsuarioAtivo();
         }}
         showMsg={showMsg}
       />
@@ -236,16 +255,16 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0">
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0">
         <div>
           {/* Logo / Header */}
-          <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-            <Database className="h-6 w-6 text-indigo-500" />
+          <div className="p-6 border-b border-slate-200 flex items-center gap-3">
+            <Database className="h-6 w-6 text-indigo-600" />
             <div>
-              <h1 className="font-bold text-lg leading-tight">GastroEpi</h1>
-              <span className="text-xs text-slate-400">v1.0.0 • Offline</span>
+              <h1 className="font-bold text-lg leading-tight text-slate-900">GastroEpi</h1>
+              <span className="text-xs text-slate-500">v1.0.0 • Offline</span>
             </div>
           </div>
 
@@ -253,10 +272,10 @@ export default function App() {
           <nav className="p-4 space-y-1">
             <button
               onClick={() => setActiveTab("pacientes")}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-bold transition-all duration-200 cursor-pointer ${
                 activeTab === "pacientes"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
               <Users className="h-4 w-4" />
@@ -265,10 +284,10 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab("calculadores")}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-bold transition-all duration-200 cursor-pointer ${
                 activeTab === "calculadores"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
               <TrendingUp className="h-4 w-4" />
@@ -277,10 +296,10 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab("auditoria")}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-bold transition-all duration-200 cursor-pointer ${
                 activeTab === "auditoria"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
               <ShieldCheck className="h-4 w-4" />
@@ -290,28 +309,22 @@ export default function App() {
         </div>
 
         {/* User / Session Info */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
+        <div className="p-4 border-t border-slate-200 bg-slate-50">
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="text-xs text-slate-500 block">Usuário Ativo</span>
-              <select
-                value={currentUser}
-                onChange={(e) => setCurrentUser(e.target.value)}
-                className="text-sm font-semibold text-slate-200 bg-transparent border-none focus:ring-0 p-0 cursor-pointer w-full truncate"
-              >
-                <option value="Dr. Mateus" className="bg-slate-900 text-slate-100">Dr. Mateus</option>
-                <option value="Dra. Ana Costa" className="bg-slate-900 text-slate-100">Dra. Ana Costa</option>
-                <option value="Dr. Carlos Silva" className="bg-slate-900 text-slate-100">Dr. Carlos Silva</option>
-              </select>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs text-slate-500 block font-semibold">Usuário Ativo</span>
+              <span className="text-sm font-bold text-slate-900 block truncate" title={currentUser}>
+                {currentUser}
+              </span>
             </div>
             <button
               onClick={async () => {
                 window.location.reload();
               }}
               title="Bloquear Banco"
-              className="p-2 hover:bg-red-950/40 hover:text-red-400 text-slate-500 rounded-lg transition-colors cursor-pointer"
+              className="p-2 hover:bg-red-50 hover:text-red-600 text-slate-550 rounded-lg transition-colors cursor-pointer"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4 text-red-500" />
             </button>
           </div>
         </div>
@@ -338,10 +351,10 @@ export default function App() {
         )}
 
         {/* Content Wrapper */}
-        <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-950/50">
+        <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-50">
           {activeTab === "pacientes" && <PacientePanel currentUser={currentUser} showMsg={showMsg} />}
           {activeTab === "calculadores" && <StatCalcPanel showMsg={showMsg} />}
-          {activeTab === "auditoria" && <AuditPanel showMsg={showMsg} />}
+          {activeTab === "auditoria" && <AuditPanel currentUser={currentUser} setCurrentUser={setCurrentUser} showMsg={showMsg} />}
         </div>
       </main>
     </div>
@@ -360,6 +373,7 @@ interface LockScreenProps {
 function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenProps) {
   const [senha, setSenha] = useState("");
   const [confirmaSenha, setConfirmaSenha] = useState("");
+  const [nomeUsuario, setNomeUsuario] = useState("");
   const [chaveRecuperacao, setChaveRecuperacao] = useState("");
   const [modoChave, setModoChave] = useState(false);
   const [unlLoading, setUnlLoading] = useState(false);
@@ -390,6 +404,10 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!nomeUsuario.trim()) {
+      showMsg("error", "Por favor, informe seu nome.");
+      return;
+    }
     if (senha.length < 8) {
       showMsg("error", "A senha deve conter pelo menos 8 caracteres.");
       return;
@@ -401,6 +419,7 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
     setUnlLoading(true);
     try {
       const recKey = await invoke<string>("configurar_senha", { senha });
+      await invoke("definir_nome_usuario", { nome: nomeUsuario.trim() });
       setChaveRecuperacao(recKey);
     } catch (err) {
       showMsg("error", "Falha ao configurar a senha: " + String(err));
@@ -415,18 +434,18 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-950 flex items-center justify-center text-slate-100 p-6">
-      <div className="w-full max-w-md p-8 rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-2xl backdrop-blur-md animate-fade-in">
+    <div className="h-screen w-screen bg-slate-50 flex items-center justify-center text-slate-900 p-6">
+      <div className="w-full max-w-md p-8 rounded-2xl border border-slate-200 bg-white shadow-2xl animate-fade-in">
         <div className="flex flex-col items-center mb-8">
-          <div className="h-16 w-16 bg-indigo-600/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center rounded-2xl mb-4">
+          <div className="h-16 w-16 bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center rounded-2xl mb-4">
             {isSetup ? <Key className="h-8 w-8" /> : <Lock className="h-8 w-8" />}
           </div>
-          <h2 className="text-2xl font-extrabold tracking-tight">
+          <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
             {isSetup ? "Configurar Acesso" : "Banco de Dados Bloqueado"}
           </h2>
-          <p className="text-sm text-slate-400 mt-2 text-center">
+          <p className="text-sm text-slate-600 mt-2 text-center">
             {isSetup
-              ? "Defina uma senha mestre para criptografar os dados em repouso."
+              ? "Defina seu nome e senha mestre para criptografar os dados em repouso."
               : modoChave
               ? "Insira sua chave de recuperação para desbloquear."
               : "Insira a senha mestre para carregar os laudos e dados de pacientes."}
@@ -435,16 +454,16 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
 
         {chaveRecuperacao ? (
           <div className="space-y-6">
-            <div className="p-4 bg-emerald-950/30 border border-emerald-800/40 rounded-xl">
-              <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider block mb-1">Chave de Recuperação Gerada</span>
-              <p className="text-xs text-slate-300 leading-relaxed mb-4">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <span className="text-xs text-emerald-800 font-semibold uppercase tracking-wider block mb-1">Chave de Recuperação Gerada</span>
+              <p className="text-xs text-slate-700 leading-relaxed mb-4">
                 Guarde esta chave em local seguro. Ela permite recuperar o acesso caso você esqueça a senha mestre.
               </p>
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg font-mono text-center text-sm font-bold tracking-widest flex items-center justify-between gap-2 text-indigo-400 select-all">
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg font-mono text-center text-sm font-bold tracking-widest flex items-center justify-between gap-2 text-indigo-750 select-all">
                 <span className="truncate">{chaveRecuperacao}</span>
                 <button
                   onClick={copiarChave}
-                  className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-100 transition-colors cursor-pointer"
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
                   title="Copiar Chave"
                 >
                   <Copy className="h-4 w-4" />
@@ -462,25 +481,36 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
         ) : isSetup ? (
           <form onSubmit={handleSetup} className="space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">Senha Mestre (Mínimo 8 caracteres)</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Nome Completo / Nome do Médico</label>
+              <input
+                type="text"
+                required
+                value={nomeUsuario}
+                onChange={(e) => setNomeUsuario(e.target.value)}
+                placeholder="Dr. Mateus"
+                className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-slate-900 font-medium placeholder-slate-400"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Senha Mestre (Mínimo 8 caracteres)</label>
               <input
                 type="password"
                 required
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none"
+                className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-slate-900 font-medium placeholder-slate-400"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">Confirmar Senha</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Confirmar Senha</label>
               <input
                 type="password"
                 required
                 value={confirmaSenha}
                 onChange={(e) => setConfirmaSenha(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none"
+                className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-slate-900 font-medium placeholder-slate-400"
               />
             </div>
 
@@ -497,7 +527,7 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
           <form onSubmit={handleUnlock} className="space-y-4">
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-semibold text-slate-400">
+                <label className="text-xs font-semibold text-slate-700">
                   {modoChave ? "Chave de Recuperação" : "Senha Mestre"}
                 </label>
                 <button
@@ -506,7 +536,7 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
                     setModoChave(!modoChave);
                     setSenha("");
                   }}
-                  className="text-xs text-indigo-400 hover:underline cursor-pointer"
+                  className="text-xs text-indigo-600 hover:underline cursor-pointer"
                 >
                   {modoChave ? "Usar senha mestre" : "Esqueceu a senha?"}
                 </button>
@@ -517,7 +547,7 @@ function LockScreen({ isSetup, onUnlock, onSetupComplete, showMsg }: LockScreenP
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder={modoChave ? "XXXX-XXXX-XXXX-XXXX" : "••••••••"}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none font-mono"
+                className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 transition-all outline-none font-mono text-slate-900 font-medium placeholder-slate-400"
               />
             </div>
 
@@ -2292,14 +2322,35 @@ function MantelHaenszelCalculator({ showMsg }: { showMsg: (type: "success" | "er
 // ──────────────────────────── PAINEL DE AUDITORIA ────────────────────────────
 
 interface AuditPanelProps {
+  currentUser: string;
+  setCurrentUser: (nome: string) => void;
   showMsg: (type: "success" | "error" | "warning", msg: string) => void;
 }
 
-function AuditPanel({ showMsg }: AuditPanelProps) {
+function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
   const [logs, setLogs] = useState<EntradaAuditoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [executingCheck, setExecutingCheck] = useState(false);
+  const [novoNomeUsuario, setNovoNomeUsuario] = useState(currentUser);
+
+  useEffect(() => {
+    setNovoNomeUsuario(currentUser);
+  }, [currentUser]);
+
+  const salvarNomeUsuario = async () => {
+    if (!novoNomeUsuario.trim()) {
+      showMsg("error", "O nome do profissional não pode ser vazio.");
+      return;
+    }
+    try {
+      await invoke("definir_nome_usuario", { nome: novoNomeUsuario.trim() });
+      setCurrentUser(novoNomeUsuario.trim());
+      showMsg("success", "Identificação do profissional atualizada com sucesso!");
+    } catch (e) {
+      showMsg("error", "Erro ao salvar nome do profissional: " + String(e));
+    }
+  };
 
   useEffect(() => {
     carregarAuditoria();
@@ -2414,8 +2465,31 @@ function AuditPanel({ showMsg }: AuditPanelProps) {
       {/* Header Panel */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight">Segurança e Auditoria</h2>
-          <p className="text-sm text-slate-400 mt-1">Cadeia de custódia verificável para transações médicas.</p>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Segurança e Auditoria</h2>
+          <p className="text-sm text-slate-650 mt-1">Cadeia de custódia verificável para transações médicas.</p>
+        </div>
+      </div>
+
+      {/* Identidade do Profissional */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">Identificação do Profissional / Endoscopista</h3>
+        <p className="text-xs text-slate-600">
+          Este nome será gravado nos logs de auditoria para cada ação (cadastrar, editar, excluir) de paciente.
+        </p>
+        <div className="flex gap-3 max-w-md">
+          <input
+            type="text"
+            value={novoNomeUsuario}
+            onChange={(e) => setNovoNomeUsuario(e.target.value)}
+            className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 font-semibold"
+            placeholder="Ex: Dr. Mateus"
+          />
+          <button
+            onClick={salvarNomeUsuario}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-xl transition-all cursor-pointer"
+          >
+            Salvar Nome
+          </button>
         </div>
       </div>
 
@@ -2424,46 +2498,46 @@ function AuditPanel({ showMsg }: AuditPanelProps) {
         <button
           onClick={executarIntegridadeCadeia}
           disabled={executingCheck}
-          className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:border-slate-700 transition-all gap-2 text-center text-xs font-semibold hover:shadow-lg disabled:opacity-50 cursor-pointer"
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all gap-2 text-center text-xs font-bold text-slate-800 hover:shadow-lg disabled:opacity-50 cursor-pointer"
         >
-          <ShieldCheck className="h-6 w-6 text-indigo-400" />
+          <ShieldCheck className="h-6 w-6 text-indigo-600" />
           <span>Verificar Cadeia Hash</span>
         </button>
 
         <button
           onClick={executarIntegridadeDados}
           disabled={executingCheck}
-          className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:border-slate-700 transition-all gap-2 text-center text-xs font-semibold hover:shadow-lg disabled:opacity-50 cursor-pointer"
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all gap-2 text-center text-xs font-bold text-slate-800 hover:shadow-lg disabled:opacity-50 cursor-pointer"
         >
-          <Sliders className="h-6 w-6 text-indigo-400" />
+          <Sliders className="h-6 w-6 text-indigo-600" />
           <span>Audit Semântico</span>
         </button>
 
         <button
           onClick={executarDiagnosticoFisico}
           disabled={executingCheck}
-          className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:border-slate-700 transition-all gap-2 text-center text-xs font-semibold hover:shadow-lg disabled:opacity-50 cursor-pointer"
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all gap-2 text-center text-xs font-bold text-slate-800 hover:shadow-lg disabled:opacity-50 cursor-pointer"
         >
-          <Database className="h-6 w-6 text-indigo-400" />
+          <Database className="h-6 w-6 text-indigo-600" />
           <span>Diagnóstico Físico</span>
         </button>
 
         <button
           onClick={criarBackupManual}
           disabled={executingCheck}
-          className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:border-slate-700 transition-all gap-2 text-center text-xs font-semibold hover:shadow-lg disabled:opacity-50 cursor-pointer"
+          className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all gap-2 text-center text-xs font-bold text-slate-800 hover:shadow-lg disabled:opacity-50 cursor-pointer"
         >
-          <RefreshCw className="h-6 w-6 text-indigo-400" />
+          <RefreshCw className="h-6 w-6 text-indigo-600" />
           <span>Backup Online</span>
         </button>
       </div>
 
       {/* Console Output */}
       {consoleOutput.length > 0 && (
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-1 text-slate-300 max-h-48 overflow-y-auto no-scrollbar shadow-inner">
-          <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider mb-2">Painel de Diagnóstico</span>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-1 text-slate-250 max-h-48 overflow-y-auto no-scrollbar shadow-inner">
+          <span className="text-[10px] text-slate-450 font-bold block uppercase tracking-wider mb-2">Painel de Diagnóstico</span>
           {consoleOutput.map((line, idx) => (
-            <div key={idx} className={line.includes("ERRO") || line.includes("FALHA") ? "text-red-400" : line.includes("SUCESSO") ? "text-emerald-400" : ""}>
+            <div key={idx} className={line.includes("ERRO") || line.includes("FALHA") ? "text-red-400 font-bold" : line.includes("SUCESSO") ? "text-emerald-400 font-bold" : ""}>
               {line}
             </div>
           ))}
@@ -2472,19 +2546,19 @@ function AuditPanel({ showMsg }: AuditPanelProps) {
 
       {/* Logs Table */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold">Últimos 50 Logs de Auditoria</h3>
+        <h3 className="text-lg font-bold text-slate-900">Últimos 50 Logs de Auditoria</h3>
         {loading ? (
-          <RefreshCw className="h-8 w-8 animate-spin text-indigo-500 mx-auto" />
+          <RefreshCw className="h-8 w-8 animate-spin text-indigo-650 mx-auto" />
         ) : logs.length === 0 ? (
-          <div className="p-6 border border-dashed border-slate-800 text-center text-slate-500 rounded-xl">
+          <div className="p-6 border border-dashed border-slate-305 text-center text-slate-600 rounded-xl bg-white">
             Nenhuma operação auditada até o momento.
           </div>
         ) : (
-          <div className="border border-slate-800/80 rounded-xl overflow-hidden shadow-xl">
+          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
             <div className="overflow-x-auto max-h-[50vh] no-scrollbar">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 bg-slate-950/40">
+                  <tr className="border-b border-slate-200 text-xs font-bold text-slate-700 bg-slate-50">
                     <th className="p-3">ID</th>
                     <th className="p-3">Data/Hora (UTC)</th>
                     <th className="p-3">Usuário</th>
@@ -2494,26 +2568,26 @@ function AuditPanel({ showMsg }: AuditPanelProps) {
                     <th className="p-3">Assinatura SHA-256 (Hash)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 text-xs text-slate-200 font-mono">
+                <tbody className="divide-y divide-slate-200 text-xs text-slate-800 font-mono">
                   {logs.map((log) => {
                     return (
-                      <tr key={log.id} className="hover:bg-slate-900/20 transition-colors">
+                      <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-3 font-bold text-slate-500">{log.id}</td>
-                        <td className="p-3 text-slate-400">{log.timestamp}</td>
-                        <td className="p-3 font-bold">{log.usuario}</td>
+                        <td className="p-3 text-slate-600">{log.timestamp}</td>
+                        <td className="p-3 font-bold text-slate-900">{log.usuario}</td>
                         <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
                             log.acao === "cadastrar"
-                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800/20"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                               : log.acao === "editar"
-                              ? "bg-indigo-950 text-indigo-400 border border-indigo-800/20"
-                              : "bg-red-950 text-red-400 border border-red-800/20"
+                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                              : "bg-red-50 text-red-800 border-red-200"
                           }`}>
                             {log.acao}
                           </span>
                         </td>
-                        <td className="p-3 text-slate-400">{log.entidade}</td>
-                        <td className="p-3 text-slate-400">{log.entidade_id || "-"}</td>
+                        <td className="p-3 text-slate-650">{log.entidade}</td>
+                        <td className="p-3 text-slate-650">{log.entidade_id || "-"}</td>
                         <td className="p-3 text-slate-500 truncate max-w-xs" title={log.hash_atual}>
                           {log.hash_atual.substring(0, 16)}...
                         </td>

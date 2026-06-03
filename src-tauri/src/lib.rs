@@ -31,6 +31,8 @@ pub fn run() {
             commands::desbloquear,
             commands::desbloquear_com_chave,
             commands::esta_desbloqueado,
+            commands::obter_nome_usuario,
+            commands::definir_nome_usuario,
             commands::listar_pacientes,
             commands::buscar_paciente,
             commands::buscar_paciente_por_prontuario,

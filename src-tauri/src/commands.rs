@@ -51,6 +51,18 @@ pub fn esta_desbloqueado(state: State<'_, DbState>) -> Result<bool, String> {
     Ok(db.esta_desbloqueado())
 }
 
+#[tauri::command]
+pub fn obter_nome_usuario(state: State<'_, DbState>) -> Result<Option<String>, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    db.obter_nome_usuario()
+}
+
+#[tauri::command]
+pub fn definir_nome_usuario(state: State<'_, DbState>, nome: String) -> Result<(), String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    db.definir_nome_usuario(&nome)
+}
+
 // ────────────── CRUD Commands ──────────────
 
 #[tauri::command]
