@@ -39,6 +39,7 @@ src-tauri/gen/
 *.db-wal
 *.db-shm
 backups/
+reports/
 
 # AI Coding Assistant Metadata
 .claude/

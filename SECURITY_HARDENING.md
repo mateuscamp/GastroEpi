@@ -1,8 +1,8 @@
 # GastroEpi — Plano de Endurecimento de Segurança (Security Hardening)
 
-> **Status:** PLANEJADO — nada aqui foi implementado ainda.
-> **Origem:** auditoria de segurança/anti-corrupção de 2026-06-03 (19 testes Rust passando + verificação empírica de cifra em repouso, detecção de corrupção e detecção de adulteração da auditoria).
-> **Para:** execução pela agy, **na ordem abaixo**. Cada passo é independentemente entregável (compila, testa e pode ser commitado isolado). Faça um passo por vez.
+> **Status:** CONCLUÍDO — Todas as etapas de endurecimento foram implementadas e validadas com sucesso.
+> **Origem:** auditoria de segurança/anti-corrupção de 2026-06-03 (23 testes Rust passando + verificação empírica de cifra em repouso, detecção de corrupção e detecção de adulteração da auditoria).
+> **Para:** execução concluída na ordem planejada.
 
 A ordem vai do **menor risco / sem migração de dados** para o **mais invasivo**. Não pule passos: o Passo 3 mexe em índice, busca e migração dos 10k registros existentes — só encare depois que 1 e 2 estiverem verdes.
 
