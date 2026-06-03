@@ -891,12 +891,12 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <td className="p-4 font-mono text-xs font-semibold text-slate-400">{p.numero_prontuario}</td>
                     <td className="p-4 font-semibold text-slate-100">{p.nome}</td>
                     <td className="p-4">
-                      {p.idade} anos • <span className="font-semibold text-slate-400">{p.sexo}</span>
+                      {p.idade} anos • <span className="font-semibold text-slate-500">{p.sexo}</span>
                     </td>
                     <td className="p-4 text-slate-300">{converterParaBR(p.data_exame)}</td>
                     <td className="p-4">
                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        p.indicacao_exame === "Diagnóstico" ? "bg-cyan-950/50 text-cyan-400 border border-cyan-800/30" : "bg-slate-950/60 text-slate-400 border border-slate-800/50"
+                        p.indicacao_exame === "Diagnóstico" ? "bg-cyan-950/30 text-cyan-500 border border-cyan-900/30" : "bg-slate-950/40 text-slate-500 border border-slate-900/40"
                       }`}>
                         {p.indicacao_exame}
                       </span>
@@ -1009,10 +1009,10 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <select
                       value={formSexo}
                       onChange={(e) => setFormSexo(e.target.value as "M" | "F")}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
                     >
-                      <option value="F">Feminino</option>
-                      <option value="M">Masculino</option>
+                      <option value="F" className="bg-slate-900 text-slate-300">Feminino</option>
+                      <option value="M" className="bg-slate-900 text-slate-300">Masculino</option>
                     </select>
                     {formErrors.sexo && <span className="text-xs text-red-400 mt-1 block">{formErrors.sexo}</span>}
                   </div>
@@ -1032,10 +1032,10 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <select
                       value={formIndicacao}
                       onChange={(e) => setFormIndicacao(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
                     >
-                      <option value="Rastreio">Rastreio</option>
-                      <option value="Diagnóstico">Diagnóstico (Sintomático)</option>
+                      <option value="Rastreio" className="bg-slate-900 text-slate-300">Rastreio</option>
+                      <option value="Diagnóstico" className="bg-slate-900 text-slate-300">Diagnóstico (Sintomático)</option>
                     </select>
                     {formErrors.indicacao_exame && <span className="text-xs text-red-400 mt-1 block">{formErrors.indicacao_exame}</span>}
                   </div>
