@@ -2,7 +2,7 @@
 
 ## 📈 Phase 1: Scaffold and Core Backend (Rust)
 - [x] **TSK-1.1:** Initialize the Tauri v2 project structure (`npm create tauri-app@latest . -- --template react-ts`).
-- [ ] **TSK-1.2:** Implement `crypto.rs` containing KDF Argon2id and AES-256-GCM logic.
+- [x] **TSK-1.2:** Implement `crypto.rs` containing KDF Argon2id and AES-256-GCM logic.
 - [ ] **TSK-1.3:** Setup SQLite database connection (`db.rs`) with schema migrations.
 - [ ] **TSK-1.4:** Create SQLite schema tables (`pacientes` and `auditoria`).
 - [ ] **TSK-1.5:** Write database level SQL triggers to lock `auditoria` table as append-only.
