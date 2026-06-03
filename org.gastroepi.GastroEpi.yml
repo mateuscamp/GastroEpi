@@ -1,0 +1,21 @@
+app-id: org.gastroepi.GastroEpi
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: tauri-app
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+  # Permissão para persistir banco de dados na pasta local do sandbox (~/.var/app/org.gastroepi.GastroEpi)
+  - --filesystem=xdg-data
+modules:
+  - name: gastroepi
+    buildsystem: simple
+    build-commands:
+      # Copia o binário compilado pelo Tauri para a pasta bin do Flatpak
+      - install -D tauri-app /app/bin/tauri-app
+    sources:
+      - type: file
+        path: src-tauri/target/release/tauri-app

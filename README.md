@@ -16,6 +16,31 @@
     *   Acompanhamento de Indicadores de Qualidade (ADR e PDR) por endoscopista com avisos visuais.
 *   **📤 Exportação Segura:** Geração de relatórios CSV formatados para Excel (pt-BR) com proteção integrada contra CSV Injection.
 
+
+---
+
+## 📥 Instalação e Configuração
+
+Para obter o código fonte e instalar as dependências do projeto localmente:
+
+### 1. Clonar o repositório
+Escolha o protocolo de sua preferência (SSH ou HTTPS):
+
+```bash
+# Via SSH (Recomendado)
+git clone git@github.com:mateuscamp/GastroEpi.git
+cd GastroEpi
+
+# Ou via HTTPS
+git clone https://github.com/mateuscamp/GastroEpi.git
+cd GastroEpi
+```
+
+### 2. Instalar dependências de frontend
+```bash
+npm install
+```
+
 ---
 
 ## 🛠️ Requisitos de Ambiente
