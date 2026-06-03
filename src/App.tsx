@@ -588,6 +588,18 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
   // Zod Erros
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  const formatarData = (val: string) => {
+    const apenasNumeros = val.replace(/\D/g, "");
+    const numerosLimitados = apenasNumeros.slice(0, 8);
+    if (numerosLimitados.length <= 2) {
+      return numerosLimitados;
+    }
+    if (numerosLimitados.length <= 4) {
+      return `${numerosLimitados.slice(0, 2)}/${numerosLimitados.slice(2)}`;
+    }
+    return `${numerosLimitados.slice(0, 2)}/${numerosLimitados.slice(2, 4)}/${numerosLimitados.slice(4)}`;
+  };
+
   useEffect(() => {
     carregarPacientes();
     carregarCatalogos();
@@ -1021,7 +1033,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <input
                       type="text"
                       value={formDataExame}
-                      onChange={(e) => setFormDataExame(e.target.value)}
+                      onChange={(e) => setFormDataExame(formatarData(e.target.value))}
                       placeholder="03/06/2026"
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
