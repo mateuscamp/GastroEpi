@@ -179,6 +179,46 @@ pub fn calcular_hash_auditoria(
     format!("{:x}", hasher.finalize())
 }
 
+/// Calcula o HMAC-SHA256 da entrada de auditoria usando a chave fornecida.
+pub fn calcular_hmac_auditoria(
+    chave: &[u8],
+    hash_anterior: &str,
+    timestamp: &str,
+    usuario: &str,
+    acao: &str,
+    entidade: &str,
+    entidade_id: Option<i64>,
+    snapshot_antes: Option<&str>,
+    snapshot_depois: Option<&str>,
+) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(chave).expect("HMAC pode aceitar chaves de qualquer tamanho");
+    let id_str = entidade_id.map(|id| id.to_string()).unwrap_or_default();
+    let partes = [
+        hash_anterior,
+        timestamp,
+        usuario,
+        acao,
+        entidade,
+        &id_str,
+        snapshot_antes.unwrap_or(""),
+        snapshot_depois.unwrap_or(""),
+    ];
+    let combined = partes.join("\u{0000}");
+    mac.update(combined.as_bytes());
+    let result = mac.finalize();
+    let code_bytes = result.into_bytes();
+    let mut s = String::new();
+    for byte in code_bytes {
+        s.push_str(&format!("{:02x}", byte));
+    }
+    format!("v2:{}", s)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +248,51 @@ mod tests {
             Some("{\"nome\":\"João\"}"),
         );
         assert_eq!(hash, hash2);
+    }
+
+    #[test]
+    fn test_hmac_auditoria() {
+        let key = [0x55u8; 32];
+        let hash = calcular_hmac_auditoria(
+            &key,
+            "v2:0000000000000000000000000000000000000000000000000000000000000000",
+            "2026-06-03T01:36:35Z",
+            "mateus",
+            "CADASTRAR",
+            "Paciente",
+            Some(1),
+            None,
+            Some("{\"nome\":\"João\"}"),
+        );
+        assert!(hash.starts_with("v2:"));
+        assert_eq!(hash.len(), 67); // v2: + 64 hex chars = 67 characters
+        
+        let hash2 = calcular_hmac_auditoria(
+            &key,
+            "v2:0000000000000000000000000000000000000000000000000000000000000000",
+            "2026-06-03T01:36:35Z",
+            "mateus",
+            "CADASTRAR",
+            "Paciente",
+            Some(1),
+            None,
+            Some("{\"nome\":\"João\"}"),
+        );
+        assert_eq!(hash, hash2);
+
+        let key_errada = [0xAAu8; 32];
+        let hash_errado = calcular_hmac_auditoria(
+            &key_errada,
+            "v2:0000000000000000000000000000000000000000000000000000000000000000",
+            "2026-06-03T01:36:35Z",
+            "mateus",
+            "CADASTRAR",
+            "Paciente",
+            Some(1),
+            None,
+            Some("{\"nome\":\"João\"}"),
+        );
+        assert_ne!(hash, hash_errado);
     }
 
     #[test]

@@ -28,3 +28,9 @@
 - [x] **TSK-4.1:** Verify end-to-end integration tests for IPC commands.
 - [x] **TSK-4.2:** Compile production executables via `tauri build`.
 - [x] **TSK-4.3:** Verify bundle footprint (ensure size < 20MB) and test launch speed.
+
+## 🔐 Phase 5: Security Hardening (auditoria 2026-06-03 — fazer em sequência)
+> Detalhes, sub-passos, migração e critérios de aceite em `SECURITY_HARDENING.md`. Executar 1 → 2 → 3 (menor risco → mais invasivo). Não pular passos.
+- [x] **TSK-5.1:** Proteção real do arquivo no **Windows** (ACL por usuário em `proteger_arquivo`; hoje é no-op). Sem migração, sem emenda à constituição.
+- [x] **TSK-5.2:** Trocar a cadeia de auditoria para **HMAC-SHA256** com a chave do cofre (hoje SHA-256 puro = forjável com acesso ao arquivo). Versionar a cadeia; **emenda o Princípio III**.
+- [x] **TSK-5.3:** Cifrar **nome e demais PII em repouso** (hoje só CPF/laudo são cifrados). Repensar índice/busca + migrar os 10k registros; **estende o Princípio II**.

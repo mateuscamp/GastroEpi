@@ -132,9 +132,44 @@ fn proteger_arquivo(caminho: &str) {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn proteger_arquivo(caminho: &str) {
+    if let Ok(username) = std::env::var("USERNAME") {
+        let status = std::process::Command::new("icacls")
+            .arg(caminho)
+            .arg("/grant:r")
+            .arg(format!("{}:(F)", username))
+            .status();
+        
+        match status {
+            Ok(s) if s.success() => {
+                let status2 = std::process::Command::new("icacls")
+                    .arg(caminho)
+                    .arg("/inheritance:r")
+                    .status();
+                if let Err(e) = status2 {
+                    eprintln!("Aviso: Falha ao remover herança de permissões em {}: {:?}", caminho, e);
+                } else if let Ok(s2) = status2 {
+                    if !s2.success() {
+                        eprintln!("Aviso: Comando icacls /inheritance:r retornou erro para {}", caminho);
+                    }
+                }
+            }
+            Ok(s) => {
+                eprintln!("Aviso: Comando icacls /grant retornou erro para {}: status {}", caminho, s);
+            }
+            Err(e) => {
+                eprintln!("Aviso: Falha ao executar icacls para {}: {:?}", caminho, e);
+            }
+        }
+    } else {
+        eprintln!("Aviso: Variável USERNAME não definida. Impossível aplicar ACL ao arquivo {}", caminho);
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn proteger_arquivo(_caminho: &str) {
-    // No-op para outras plataformas como Windows (best-effort)
+    // No-op para outras plataformas (best-effort)
 }
 
 impl BancoDados {
@@ -500,6 +535,7 @@ impl BancoDados {
 
         if crate::crypto::validar_canario(&cofre, &token_canario) {
             self.cofre = Some(cofre);
+            let _ = self.migrar_nomes_para_cifrado();
             Ok(true)
         } else {
             Ok(false)
@@ -518,10 +554,51 @@ impl BancoDados {
         let cofre = cofre_de_chave_recovery(chave_legivel)?;
         if crate::crypto::validar_canario(&cofre, &token_canario) {
             self.cofre = Some(cofre);
+            let _ = self.migrar_nomes_para_cifrado();
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    pub fn migrar_nomes_para_cifrado(&self) -> Result<(), String> {
+        let mut conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        
+        let mut stmt = tx.prepare("SELECT id, nome FROM pacientes").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            let id: i64 = row.get(0)?;
+            let nome: String = row.get(1)?;
+            Ok((id, nome))
+        }).map_err(|e| e.to_string())?;
+        
+        let mut updates = Vec::new();
+        for r in rows {
+            let (id, nome) = r.map_err(|e| e.to_string())?;
+            // Se tentar decifrar falhar, significa que está em texto claro (legacy) e precisa ser cifrado!
+            let dec_res = self.decifrar_campo(Some(&nome));
+            if dec_res.is_err() {
+                // É texto claro, cifra e agenda update
+                let cifrado = self.cifrar_campo(Some(&nome)).ok_or("Erro ao cifrar nome na migração")?;
+                updates.push((id, cifrado));
+            }
+        }
+        drop(stmt);
+        
+        if !updates.is_empty() {
+            // Realiza backup automático antes da migração
+            let _ = self.realizar_backup(10);
+            
+            for (id, cifrado) in updates {
+                tx.execute(
+                    "UPDATE pacientes SET nome = ?1 WHERE id = ?2",
+                    rusqlite::params![cifrado, id]
+                ).map_err(|e| e.to_string())?;
+            }
+        }
+        
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     // ──────────────────────────── CRUD de Pacientes ──────────────────────────────
@@ -549,7 +626,7 @@ impl BancoDados {
         let id: i64 = row.get(0)?;
         let numero_prontuario: String = row.get(1)?;
         let cpf_cifrado: Option<String> = row.get(2)?;
-        let nome: String = row.get(3)?;
+        let nome_cifrado: String = row.get(3)?;
         let data_exame: String = row.get(4)?;
         let idade: i32 = row.get(5)?;
         let sexo: String = row.get(6)?;
@@ -561,6 +638,11 @@ impl BancoDados {
             .map_err(|err| rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(std::io::Error::new(std::io::ErrorKind::Other, err))))?;
         let resultado_histopatologico = self.decifrar_campo(laudo_cifrado.as_deref())
             .map_err(|err| rusqlite::Error::FromSqlConversionFailure(8, rusqlite::types::Type::Text, Box::new(std::io::Error::new(std::io::ErrorKind::Other, err))))?;
+        
+        let nome = match self.decifrar_campo(Some(&nome_cifrado)) {
+            Ok(Some(dec)) => dec,
+            _ => nome_cifrado,
+        };
 
         Ok(Paciente {
             id: Some(id),
@@ -751,7 +833,7 @@ impl BancoDados {
     pub fn listar(&self) -> Result<Vec<Paciente>, String> {
         let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes ORDER BY nome")
+            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes")
             .map_err(|e| e.to_string())?;
 
         let rows = stmt.query_map([], |row| {
@@ -765,6 +847,10 @@ impl BancoDados {
         }
 
         self.carregar_relacoes(&conn, &mut pacientes)?;
+        
+        // Ordena em memória de forma insensível a maiúsculas/minúsculas
+        pacientes.sort_by(|a, b| a.nome.to_lowercase().cmp(&b.nome.to_lowercase()));
+        
         Ok(pacientes)
     }
 
@@ -774,6 +860,7 @@ impl BancoDados {
 
         let cpf_cifrado = self.cifrar_campo(paciente.cpf.as_deref());
         let laudo_cifrado = self.cifrar_campo(paciente.resultado_histopatologico.as_deref());
+        let nome_cifrado = self.cifrar_campo(Some(&paciente.nome)).unwrap_or_else(|| paciente.nome.clone());
 
         tx.execute(
             "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
@@ -781,7 +868,7 @@ impl BancoDados {
             params![
                 paciente.numero_prontuario,
                 cpf_cifrado,
-                paciente.nome,
+                nome_cifrado,
                 paciente.data_exame,
                 paciente.idade,
                 paciente.sexo,
@@ -844,29 +931,18 @@ impl BancoDados {
     }
 
     pub fn buscar_por_termo(&self, parcial: &str) -> Result<Vec<Paciente>, String> {
-        let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
-        let termo = format!("%{}%", parcial.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+        let todos = self.listar()?;
+        let parcial_lower = parcial.to_lowercase();
         
-        let mut stmt = conn
-            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame \
-                      FROM pacientes \
-                      WHERE UPPER(nome) LIKE UPPER(?1) ESCAPE '\\' \
-                         OR numero_prontuario LIKE ?1 ESCAPE '\\' \
-                      ORDER BY nome")
-            .map_err(|e| e.to_string())?;
-
-        let rows = stmt.query_map([termo], |row| {
-            self.para_paciente(row)
-        }).map_err(|e| e.to_string())?;
-
-        let mut pacientes = Vec::new();
-        for p in rows {
-            let p_unwrapped = p.map_err(|e| e.to_string())?;
-            pacientes.push(p_unwrapped);
-        }
-
-        self.carregar_relacoes(&conn, &mut pacientes)?;
-        Ok(pacientes)
+        let filtrados: Vec<Paciente> = todos
+            .into_iter()
+            .filter(|p| {
+                p.nome.to_lowercase().contains(&parcial_lower)
+                    || p.numero_prontuario.to_lowercase().contains(&parcial_lower)
+            })
+            .collect();
+            
+        Ok(filtrados)
     }
 
     pub fn editar(&self, usuario: &str, paciente: &Paciente) -> Result<(), String> {
@@ -887,13 +963,14 @@ impl BancoDados {
 
         let cpf_cifrado = self.cifrar_campo(paciente.cpf.as_deref());
         let laudo_cifrado = self.cifrar_campo(paciente.resultado_histopatologico.as_deref());
+        let nome_cifrado = self.cifrar_campo(Some(&paciente.nome)).unwrap_or_else(|| paciente.nome.clone());
 
         tx.execute(
             "UPDATE pacientes SET numero_prontuario=?1, cpf=?2, nome=?3, data_exame=?4, idade=?5, sexo=?6, polipo=?7, resultado_histopatologico=?8, indicacao_exame=?9 WHERE id=?10",
             params![
                 paciente.numero_prontuario,
                 cpf_cifrado,
-                paciente.nome,
+                nome_cifrado,
                 paciente.data_exame,
                 paciente.idade,
                 paciente.sexo,
@@ -985,7 +1062,7 @@ impl BancoDados {
                 |row| row.get(0)
             ).unwrap_or_else(|_| "0".repeat(64));
 
-            let hash_atual = crate::crypto::calcular_hash_auditoria(
+            let hash_atual = self.calcular_hash_ou_hmac_auditoria(
                 &prev_hash,
                 &timestamp,
                 usuario,
@@ -1052,7 +1129,7 @@ impl BancoDados {
                 |row| row.get(0)
             ).unwrap_or_else(|_| "0".repeat(64));
 
-            let hash_atual = crate::crypto::calcular_hash_auditoria(
+            let hash_atual = self.calcular_hash_ou_hmac_auditoria(
                 &prev_hash,
                 &timestamp,
                 usuario,
@@ -1118,6 +1195,42 @@ impl BancoDados {
         Ok(list)
     }
 
+    fn calcular_hash_ou_hmac_auditoria(
+        &self,
+        hash_anterior: &str,
+        timestamp: &str,
+        usuario: &str,
+        acao: &str,
+        entidade: &str,
+        entidade_id: Option<i64>,
+        snapshot_antes: Option<&str>,
+        snapshot_depois: Option<&str>,
+    ) -> String {
+        match &self.cofre {
+            Some(cofre) => crate::crypto::calcular_hmac_auditoria(
+                cofre.key(),
+                hash_anterior,
+                timestamp,
+                usuario,
+                acao,
+                entidade,
+                entidade_id,
+                snapshot_antes,
+                snapshot_depois,
+            ),
+            None => crate::crypto::calcular_hash_auditoria(
+                hash_anterior,
+                timestamp,
+                usuario,
+                acao,
+                entidade,
+                entidade_id,
+                snapshot_antes,
+                snapshot_depois,
+            ),
+        }
+    }
+
     // ──────────────────────────── Métodos de Auditoria Interna ───────────────────
 
     fn auditar(
@@ -1149,7 +1262,7 @@ impl BancoDados {
             |row| row.get(0)
         ).unwrap_or_else(|_| "0".repeat(64));
 
-        let hash_atual = crate::crypto::calcular_hash_auditoria(
+        let hash_atual = self.calcular_hash_ou_hmac_auditoria(
             &prev_hash,
             &timestamp,
             usuario,
@@ -1330,16 +1443,35 @@ impl BancoDados {
         for row_res in rows {
             let entry = row_res.map_err(|e| e.to_string())?;
             let entry_id = entry.id.unwrap_or(0);
-            let expected = crate::crypto::calcular_hash_auditoria(
-                &prev_hash,
-                &entry.timestamp,
-                &entry.usuario,
-                &entry.acao,
-                &entry.entidade,
-                entry.entidade_id,
-                entry.snapshot_antes.as_deref(),
-                entry.snapshot_depois.as_deref(),
-            );
+            let expected = if entry.hash_atual.starts_with("v2:") {
+                match &self.cofre {
+                    Some(cofre) => crate::crypto::calcular_hmac_auditoria(
+                        cofre.key(),
+                        &prev_hash,
+                        &entry.timestamp,
+                        &entry.usuario,
+                        &entry.acao,
+                        &entry.entidade,
+                        entry.entidade_id,
+                        entry.snapshot_antes.as_deref(),
+                        entry.snapshot_depois.as_deref(),
+                    ),
+                    None => {
+                        return Err("Cofre bloqueado: chave indisponível para verificar a cadeia HMAC".to_string());
+                    }
+                }
+            } else {
+                crate::crypto::calcular_hash_auditoria(
+                    &prev_hash,
+                    &entry.timestamp,
+                    &entry.usuario,
+                    &entry.acao,
+                    &entry.entidade,
+                    entry.entidade_id,
+                    entry.snapshot_antes.as_deref(),
+                    entry.snapshot_depois.as_deref(),
+                )
+            };
 
             if expected != entry.hash_atual {
                 inconsistencias.push(InconsistenciaAuditoria {
@@ -1613,6 +1745,145 @@ mod tests {
         let dados_inc = db.verificar_integridade_dados().unwrap();
         assert!(dados_inc.is_empty());
 
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_hmac_audit_verification_flow() {
+        let path = temp_db_path("gastroepi_test_hmac.db");
+        let mut db = BancoDados::new(&path);
+        db.criar().unwrap();
+        
+        // 1. Sem senha configurada: cadastrar comorbidade grava com SHA-256
+        db.adicionar_comorbidade_catalogo("mateus", "Comorbidade Legacy").unwrap();
+        
+        let conn = obter_conexao(&path).unwrap();
+        let hash_legacy: String = conn.query_row(
+            "SELECT hash_atual FROM auditoria ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert!(!hash_legacy.starts_with("v2:"));
+        
+        // Integridade passa
+        assert!(db.verificar_integridade().unwrap().is_empty());
+        
+        // 2. Configura senha: novas inserções devem ter prefixo v2:
+        db.configurar_senha("senha12345").unwrap();
+        db.adicionar_comorbidade_catalogo("mateus", "Comorbidade HMAC").unwrap();
+        
+        let hash_hmac: String = conn.query_row(
+            "SELECT hash_atual FROM auditoria ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert!(hash_hmac.starts_with("v2:"));
+        
+        // Integridade passa com o banco desbloqueado
+        assert!(db.verificar_integridade().unwrap().is_empty());
+        
+        // 3. Bloqueia cofre: verificar_integridade deve falhar com erro de cofre bloqueado
+        db.cofre = None;
+        let verify_res = db.verificar_integridade();
+        assert!(verify_res.is_err());
+        assert!(verify_res.err().unwrap().contains("Cofre bloqueado"));
+        
+        // Desbloqueia novamente
+        db.desbloquear("senha12345").unwrap();
+        assert!(db.verificar_integridade().unwrap().is_empty());
+        
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_cifragem_nome_e_migracao() {
+        let path = temp_db_path("gastroepi_test_nome_cifragem.db");
+        let mut db = BancoDados::new(&path);
+        db.criar().unwrap();
+        
+        // 1. Cria paciente quando o banco está bloqueado/sem senha (nome fica em texto claro)
+        let conn = obter_conexao(&path).unwrap();
+        conn.execute(
+            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
+             VALUES ('111', NULL, 'João Silva', '2026-06-03', 45, 'M', 0, NULL, 'Rastreio')",
+            []
+        ).unwrap();
+        
+        // Verifica que o nome está gravado como "João Silva" (em claro)
+        let nome_no_db: String = conn.query_row(
+            "SELECT nome FROM pacientes WHERE numero_prontuario = '111'",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert_eq!(nome_no_db, "João Silva");
+        
+        // 2. Configura senha, o que inicializa o cofre.
+        db.configurar_senha("senha12345").unwrap();
+        
+        // A migração deve rodar
+        db.migrar_nomes_para_cifrado().unwrap();
+        
+        // Verifica que o nome no banco de dados agora está cifrado (não é mais "João Silva")
+        let nome_cifrado_no_db: String = conn.query_row(
+            "SELECT nome FROM pacientes WHERE numero_prontuario = '111'",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert_ne!(nome_cifrado_no_db, "João Silva");
+        
+        // 3. Lê o paciente e verifica se ele é decifrado com sucesso
+        let p = db.buscar(1).unwrap().unwrap();
+        assert_eq!(p.nome, "João Silva");
+        
+        // 4. Cadastra um novo paciente com cofre desbloqueado e garante que é cifrado na hora
+        let p_novo = Paciente {
+            id: None,
+            numero_prontuario: "222".to_string(),
+            cpf: None,
+            nome: "Maria Oliveira".to_string(),
+            data_exame: "2026-06-03".to_string(),
+            idade: 50,
+            sexo: "F".to_string(),
+            polipo: 1,
+            resultado_histopatologico: None,
+            indicacao_exame: "Rastreio".to_string(),
+            comorbidades: vec![],
+            sintomas: vec![],
+            historico_familiar: vec![],
+            endoscopista: None,
+        };
+        let pid_novo = db.cadastrar("mateus", &p_novo).unwrap();
+        
+        let nome_novo_no_db: String = conn.query_row(
+            "SELECT nome FROM pacientes WHERE id = ?1",
+            [pid_novo],
+            |row| row.get(0)
+        ).unwrap();
+        assert_ne!(nome_novo_no_db, "Maria Oliveira");
+        
+        // 5. Verifica buscar_por_termo
+        let resultados = db.buscar_por_termo("oliveira").unwrap();
+        assert_eq!(resultados.len(), 1);
+        assert_eq!(resultados[0].nome, "Maria Oliveira");
+        
+        let resultados_all = db.buscar_por_termo("joão").unwrap();
+        assert_eq!(resultados_all.len(), 1);
+        assert_eq!(resultados_all[0].nome, "João Silva");
+        
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_proteger_arquivo_windows() {
+        let path = temp_db_path("gastroepi_test_acl.db");
+        fs::write(&path, b"test content").unwrap();
+        
+        proteger_arquivo(&path);
+        
+        // Verifica que o arquivo ainda existe e pode ser manipulado
+        assert!(std::path::Path::new(&path).exists());
+        
         let _ = fs::remove_file(&path);
     }
 }

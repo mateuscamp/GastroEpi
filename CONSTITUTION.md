@@ -6,10 +6,10 @@
 Every feature must function 100% offline, executing locally without any external network dependency, tracking, or telemetry. All user data, databases, and logs are kept strictly on the local filesystem, ensuring medical data privacy and compliance with LGPD.
 
 ### II. Security-in-Depth (Segurança em Profundidade)
-All sensitive patient data (CPF) and histological findings (laudos) must be encrypted at rest using AES-256-GCM. The encryption key must be derived from a user-provided master password via the KDF Argon2id. No plaintext passwords or keys may be stored on the disk.
+All sensitive patient data (CPF, name/nome) and histological findings (laudos) must be encrypted at rest using AES-256-GCM, ensuring patient privacy and LGPD compliance (supporting Principle I). The encryption key must be derived from a user-provided master password via the KDF Argon2id. No plaintext passwords or keys may be stored on the disk.
 
 ### III. Verifiable Append-Only Audit (Auditoria Append-Only Verificável)
-All CRUD operations on clinical data must be logged to a database-enforced append-only audit table. Triggers at the database level must block manual updates or deletions. The audit log must use a cryptographic SHA-256 hash-chain, where each entry's hash depends on the preceding entry's hash, allowing instant integrity verification.
+All CRUD operations on clinical data must be logged to a database-enforced append-only audit table. Triggers at the database level must block manual updates or deletions. The audit log must use a cryptographic HMAC-SHA256 hash-chain (linked to the vault key), while supporting legacy SHA-256 hash-chain entries for backward compatibility, allowing instant, authenticated integrity verification.
 
 ### IV. Mathematical & Statistical Fidelity (Fidelidade Estatística)
 All calculations in the epidemiological module (StatCalc) must use high-precision numerical algorithms (`f64`). Statistical routines (Cochran-Armitage trend test, Wilson score intervals, and Fleiss sample size formulas) must match benchmark scientific results and handle mathematical boundaries gracefully (no crash on divisions by zero).
@@ -28,4 +28,4 @@ Input validation must occur at the boundaries of the UI. Types must be strictly 
 
 ---
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-03
+**Version**: 1.2.0 | **Ratified**: 2026-06-03
