@@ -28,4 +28,24 @@ Input validation must occur at the boundaries of the UI. Types must be strictly 
 
 ---
 
-**Version**: 1.2.0 | **Ratified**: 2026-06-03
+## Session Startup Protocol (Agent)
+
+> **MANDATORY:** At the start of every new session working on this project, the agent MUST run the following check **once** before any other task:
+
+```bash
+cd src-tauri && cargo audit 2>&1 | grep -E "^(Crate|Warning|Title|ID):" | grep -A3 "gtk\|gdk\|atk"
+```
+
+**If the output shows NO results** (i.e., the GTK3 binding warnings for `gtk`, `gdk`, `atk`, `gdkwayland`, `gdkx11` are gone), it means Tauri has migrated to GTK4. In that case:
+
+```bash
+cd src-tauri && cargo update
+```
+
+Then commit with message: `chore(deps): cargo update — GTK4 bindings now available`.
+
+**If the warnings are still present**, skip silently and proceed with the session normally. Do NOT repeat this check mid-session.
+
+---
+
+**Version**: 1.3.0 | **Ratified**: 2026-06-04
