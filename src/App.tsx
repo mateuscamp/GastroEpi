@@ -20,7 +20,8 @@ import {
   LogOut,
   Sliders,
   Play,
-  Copy
+  Copy,
+  ChevronDown
 } from "lucide-react";
 import {
   pacienteSchema,
@@ -1037,14 +1038,17 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   </div>
                   <div>
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Sexo *</label>
-                    <select
-                      value={formSexo}
-                      onChange={(e) => setFormSexo(e.target.value as "M" | "F")}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
-                    >
-                      <option value="F" className="bg-slate-900 text-slate-300">Feminino</option>
-                      <option value="M" className="bg-slate-900 text-slate-300">Masculino</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={formSexo}
+                        onChange={(e) => setFormSexo(e.target.value as "M" | "F")}
+                        className="w-full appearance-none bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 pr-8 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
+                      >
+                        <option value="F" className="bg-slate-950 text-slate-300">Feminino</option>
+                        <option value="M" className="bg-slate-950 text-slate-300">Masculino</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-3 h-4 w-4 text-slate-500" />
+                    </div>
                     {formErrors.sexo && <span className="text-xs text-red-400 mt-1 block">{formErrors.sexo}</span>}
                   </div>
                   <div>
@@ -1060,14 +1064,17 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   </div>
                   <div>
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Indicação *</label>
-                    <select
-                      value={formIndicacao}
-                      onChange={(e) => setFormIndicacao(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
-                    >
-                      <option value="Rastreio" className="bg-slate-900 text-slate-300">Rastreio</option>
-                      <option value="Diagnóstico" className="bg-slate-900 text-slate-300">Diagnóstico</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={formIndicacao}
+                        onChange={(e) => setFormIndicacao(e.target.value)}
+                        className="w-full appearance-none bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 pr-8 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
+                      >
+                        <option value="Rastreio" className="bg-slate-950 text-slate-300">Rastreio</option>
+                        <option value="Diagnóstico" className="bg-slate-950 text-slate-300">Diagnóstico</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-3 h-4 w-4 text-slate-500" />
+                    </div>
                     {formErrors.indicacao_exame && <span className="text-xs text-red-400 mt-1 block">{formErrors.indicacao_exame}</span>}
                   </div>
                 </div>
@@ -1192,16 +1199,17 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                               className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-xs outline-none"
                             />
                           </div>
-                          <div>
+                          <div className="relative">
                             <select
                               value={h.grau}
                               onChange={(e) => updateHistoricoItem(index, "grau", parseInt(e.target.value))}
-                              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                              className="w-full appearance-none bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 pr-7 text-xs outline-none text-slate-300"
                             >
-                              <option value={1}>1º Grau (Pais, Filhos, Irmãos)</option>
-                              <option value={2}>2º Grau (Avós, Tios, Sobrinhos)</option>
-                              <option value={3}>3º Grau (Primos)</option>
+                              <option value={1} className="bg-slate-950 text-slate-300">1º Grau (Pais, Filhos, Irmãos)</option>
+                              <option value={2} className="bg-slate-950 text-slate-300">2º Grau (Avós, Tios, Sobrinhos)</option>
+                              <option value={3} className="bg-slate-950 text-slate-300">3º Grau (Primos)</option>
                             </select>
+                            <ChevronDown className="pointer-events-none absolute right-2 top-1.5 h-3.5 w-3.5 text-slate-500" />
                           </div>
                           <div>
                             <input
