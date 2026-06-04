@@ -1004,8 +1004,9 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Registro Prontuário *</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={formProntuario}
-                      onChange={(e) => setFormProntuario(e.target.value)}
+                      onChange={(e) => setFormProntuario(e.target.value.replace(/\D/g, ""))}
                       placeholder="Ex: 874312"
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
@@ -1015,8 +1016,17 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <label className="text-xs text-slate-400 font-semibold block mb-1">CPF (Opcional)</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={formCpf}
-                      onChange={(e) => setFormCpf(e.target.value)}
+                      onChange={(e) => {
+                        const apenasDigitos = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        const d = apenasDigitos;
+                        let masked = d;
+                        if (d.length > 9) masked = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+                        else if (d.length > 6) masked = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+                        else if (d.length > 3) masked = `${d.slice(0,3)}.${d.slice(3)}`;
+                        setFormCpf(masked);
+                      }}
                       placeholder="000.000.000-00"
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
@@ -1263,9 +1273,11 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   <div>
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Quantidade de Pólipos *</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={formPolipo}
-                      onChange={(e) => setFormPolipo(e.target.value)}
+                      onChange={(e) => setFormPolipo(e.target.value.replace(/\D/g, ""))}
+                      onKeyDown={(e) => ["e", "E", "+", "-", ".", ","].includes(e.key) && e.preventDefault()}
                       placeholder="0"
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
