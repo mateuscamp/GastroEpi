@@ -177,7 +177,7 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [isSetup, setIsSetup] = useState(false); // se precisa cadastrar senha
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState("Dr. Mateus");
+  const [currentUser, setCurrentUser] = useState("Mateus");
   const [activeTab, setActiveTab] = useState<"pacientes" | "calculadores" | "auditoria">("pacientes");
 
   // Alertas globais
@@ -194,8 +194,8 @@ export default function App() {
       if (nome) {
         setCurrentUser(nome);
       } else {
-        await invoke("definir_nome_usuario", { nome: "Dr. Mateus" });
-        setCurrentUser("Dr. Mateus");
+        await invoke("definir_nome_usuario", { nome: "Mateus" });
+        setCurrentUser("Mateus");
       }
     } catch (e) {
       console.error("Erro ao carregar usuário ativo:", e);
@@ -580,6 +580,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
   const [formComorbidades, setFormComorbidades] = useState<string[]>([]);
   const [formSintomas, setFormSintomas] = useState<string[]>([]);
   const [formHistorico, setFormHistorico] = useState<HistoricoFamiliar[]>([]);
+  const [formEndoscopista, setFormEndoscopista] = useState("");
 
   // Modais de catálogo customizados
   const [addComorbidadeNome, setAddComorbidadeNome] = useState("");
@@ -657,6 +658,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
     setFormComorbidades([]);
     setFormSintomas([]);
     setFormHistorico([]);
+    setFormEndoscopista("");
     setFormErrors({});
     setModalAberto(true);
   };
@@ -676,6 +678,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
     setFormComorbidades(p.comorbidades);
     setFormSintomas(p.sintomas);
     setFormHistorico(p.historico_familiar);
+    setFormEndoscopista(p.endoscopista || "");
     setFormErrors({});
     setModalAberto(true);
   };
@@ -724,7 +727,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
       comorbidades: formComorbidades,
       sintomas: formSintomas,
       historico_familiar: formHistorico,
-      endoscopista: editandoId ? null : currentUser,
+      endoscopista: formEndoscopista.trim() || null,
     };
 
     try {
@@ -893,7 +896,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   <th className="p-4">Data do Exame</th>
                   <th className="p-4">Indicação</th>
                   <th className="p-4 text-center">Pólipos</th>
-                  <th className="p-4">Endoscopista</th>
+                  <th className="p-4">Examinador</th>
                   <th className="p-4 text-center">Ações</th>
                 </tr>
               </thead>
@@ -903,12 +906,15 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <td className="p-4 font-mono text-xs font-semibold text-slate-400">{p.numero_prontuario}</td>
                     <td className="p-4 font-semibold text-slate-100">{p.nome}</td>
                     <td className="p-4">
-                      {p.idade} anos • <span className="font-semibold text-slate-500">{p.sexo}</span>
+                      {p.idade} anos{" "}
+                      <span className="px-2 py-0.5 rounded text-xs font-semibold border bg-slate-800/70 text-slate-300 border-slate-700/60">
+                        {p.sexo}
+                      </span>
                     </td>
                     <td className="p-4 text-slate-300">{converterParaBR(p.data_exame)}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        p.indicacao_exame === "Diagnóstico" ? "bg-cyan-950/30 text-cyan-500 border border-cyan-900/30" : "bg-slate-950/40 text-slate-500 border border-slate-900/40"
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${
+                        p.indicacao_exame === "Diagnóstico" ? "bg-cyan-900/50 text-cyan-400 border-cyan-800/60" : "bg-slate-800/70 text-slate-300 border-slate-700/60"
                       }`}>
                         {p.indicacao_exame}
                       </span>
@@ -1004,6 +1010,19 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-semibold block mb-1">Examinador (Opcional)</label>
+                    <input
+                      type="text"
+                      value={formEndoscopista}
+                      onChange={(e) => setFormEndoscopista(e.target.value)}
+                      placeholder="Ex: Mateus Campelo"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Idade *</label>
@@ -1047,14 +1066,14 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-300"
                     >
                       <option value="Rastreio" className="bg-slate-900 text-slate-300">Rastreio</option>
-                      <option value="Diagnóstico" className="bg-slate-900 text-slate-300">Diagnóstico (Sintomático)</option>
+                      <option value="Diagnóstico" className="bg-slate-900 text-slate-300">Diagnóstico</option>
                     </select>
                     {formErrors.indicacao_exame && <span className="text-xs text-red-400 mt-1 block">{formErrors.indicacao_exame}</span>}
                   </div>
                 </div>
               </div>
 
-              {/* Seção 2: Histórico Clínico e Sintomas */}
+              {/* Seção 2: Histórico Clínico e Indicações */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Comorbidades */}
                 <div className="space-y-3">
@@ -1099,15 +1118,15 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                   </div>
                 </div>
 
-                {/* Sintomas */}
+                {/* Indicações */}
                 <div className="space-y-3">
-                  <span className="text-xs font-semibold text-indigo-400 uppercase tracking-widest block border-b border-slate-800 pb-2">Sintomas</span>
+                  <span className="text-xs font-semibold text-indigo-400 uppercase tracking-widest block border-b border-slate-800 pb-2">Indicações</span>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={addSintomaNome}
                       onChange={(e) => setAddSintomaNome(e.target.value)}
-                      placeholder="Criar novo sintoma..."
+                      placeholder="Criar nova indicação..."
                       className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs outline-none"
                     />
                     <button
@@ -1394,7 +1413,7 @@ function QualidadeIndicators({ showMsg }: { showMsg: (type: "success" | "error" 
       {/* Tabela de Qualidade por Endoscopista */}
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-bold">Indicadores de Qualidade por Endoscopista</h3>
+          <h3 className="text-lg font-bold">Indicadores de Qualidade por Examinador</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Métricas de ADR (Adenoma Detection Rate) e PDR (Polyp Detection Rate) recomendadas pela ASGE/ACG.
           </p>
@@ -1409,7 +1428,7 @@ function QualidadeIndicators({ showMsg }: { showMsg: (type: "success" | "error" 
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 bg-slate-950/40">
-                  <th className="p-4">Endoscopista</th>
+                  <th className="p-4">Examinador</th>
                   <th className="p-4 text-center">Nº Exames</th>
                   <th className="p-4 text-center">PDR (Pólipos)</th>
                   <th className="p-4 text-center">ADR (Adenomas) *</th>
@@ -2467,7 +2486,7 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
 
       {/* Identidade do Profissional */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-4">
-        <h3 className="text-lg font-bold text-slate-100">Identificação do Profissional / Endoscopista</h3>
+        <h3 className="text-lg font-bold text-slate-100">Identificação do Usuário</h3>
         <p className="text-xs text-slate-400">
           Este nome será gravado nos logs de auditoria para cada ação (cadastrar, editar, excluir) de paciente.
         </p>
@@ -2477,7 +2496,7 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
             value={novoNomeUsuario}
             onChange={(e) => setNovoNomeUsuario(e.target.value)}
             className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-250 font-medium"
-            placeholder="Ex: Dr. Mateus"
+            placeholder="Ex: Mateus Campelo"
           />
           <button
             onClick={salvarNomeUsuario}
