@@ -59,7 +59,7 @@ pub struct Paciente {
     pub historico_familiar: Vec<HistoricoFamiliar>,
     
     // Carregado dinamicamente via log de auditoria
-    pub endoscopista: Option<String>,
+    pub examinador: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,7 +207,8 @@ impl BancoDados {
                 sexo                      TEXT CHECK (sexo IN ('M', 'F')),
                 polipo                    INTEGER CHECK (polipo >= 0),
                 resultado_histopatologico TEXT,
-                indicacao_exame           TEXT    NOT NULL DEFAULT 'Rastreio'
+                indicacao_exame           TEXT    NOT NULL DEFAULT 'Rastreio',
+                examinador                TEXT
             )",
             [],
         ).map_err(|e| e.to_string())?;
@@ -337,6 +338,21 @@ impl BancoDados {
                 [s],
             );
         }
+
+        // Se a coluna endoscopista existia, renomeia para examinador
+        let _ = conn.execute("ALTER TABLE pacientes RENAME COLUMN endoscopista TO examinador", []);
+        // Se a coluna examinador não existe (ex: banco novo ou antigo sem endoscopista/examinador), adiciona
+        let _ = conn.execute("ALTER TABLE pacientes ADD COLUMN examinador TEXT", []);
+
+        // Popula a nova coluna com o valor da auditoria para registros legados que ainda não têm a coluna populada
+        let _ = conn.execute(
+            "UPDATE pacientes SET examinador = (
+                SELECT usuario FROM auditoria \
+                WHERE entidade = 'paciente' AND acao = 'cadastrar' AND entidade_id = pacientes.id \
+                LIMIT 1
+            ) WHERE examinador IS NULL",
+            [],
+        );
 
         proteger_arquivo(&self.caminho);
         Ok(())
@@ -655,6 +671,7 @@ impl BancoDados {
         let polipo: i32 = row.get(7)?;
         let laudo_cifrado: Option<String> = row.get(8)?;
         let indicacao_exame: String = row.get(9)?;
+        let examinador: Option<String> = row.get(10)?;
 
         let cpf = self.decifrar_campo(cpf_cifrado.as_deref())
             .map_err(|err| rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(std::io::Error::new(std::io::ErrorKind::Other, err))))?;
@@ -680,7 +697,7 @@ impl BancoDados {
             comorbidades: vec![],
             sintomas: vec![],
             historico_familiar: vec![],
-            endoscopista: None,
+            examinador,
         })
     }
 
@@ -776,33 +793,6 @@ impl BancoDados {
             }
         }
 
-        // Endoscopista
-        {
-            let query = format!(
-                "SELECT entidade_id, usuario \
-                 FROM auditoria \
-                 WHERE entidade = 'paciente' AND acao = 'cadastrar' AND entidade_id IN ({})",
-                markers
-            );
-            let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-            let rows = stmt.query_map(rusqlite::params_from_iter(&ids), |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-            }).map_err(|e| e.to_string())?;
-
-            let mut endo_map = HashMap::new();
-            for r in rows {
-                let (pid, user) = r.map_err(|e| e.to_string())?;
-                endo_map.insert(pid, user);
-            }
-
-            for p in pacientes.iter_mut() {
-                if let Some(pid) = p.id {
-                    let user = endo_map.get(&pid).cloned().unwrap_or_else(|| "Dr. Sistema".to_string());
-                    p.endoscopista = Some(user);
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -855,7 +845,7 @@ impl BancoDados {
     pub fn listar(&self) -> Result<Vec<Paciente>, String> {
         let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes")
+            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador FROM pacientes")
             .map_err(|e| e.to_string())?;
 
         let rows = stmt.query_map([], |row| {
@@ -885,8 +875,8 @@ impl BancoDados {
         let nome_cifrado = self.cifrar_campo(Some(&paciente.nome)).unwrap_or_else(|| paciente.nome.clone());
 
         tx.execute(
-            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO pacientes (numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 paciente.numero_prontuario,
                 cpf_cifrado,
@@ -896,7 +886,8 @@ impl BancoDados {
                 paciente.sexo,
                 paciente.polipo,
                 laudo_cifrado,
-                paciente.indicacao_exame
+                paciente.indicacao_exame,
+                paciente.examinador
             ],
         ).map_err(|e| e.to_string())?;
 
@@ -915,7 +906,7 @@ impl BancoDados {
     pub fn buscar(&self, id_paciente: i64) -> Result<Option<Paciente>, String> {
         let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes WHERE id = ?1")
+            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador FROM pacientes WHERE id = ?1")
             .map_err(|e| e.to_string())?;
 
         let res = stmt.query_row([id_paciente], |row| {
@@ -935,7 +926,7 @@ impl BancoDados {
     pub fn buscar_por_prontuario(&self, prontuario: &str) -> Result<Option<Paciente>, String> {
         let conn = obter_conexao(&self.caminho).map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes WHERE numero_prontuario = ?1")
+            .prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador FROM pacientes WHERE numero_prontuario = ?1")
             .map_err(|e| e.to_string())?;
 
         let res = stmt.query_row([prontuario.trim()], |row| {
@@ -974,7 +965,7 @@ impl BancoDados {
         let tx = conn.transaction().map_err(|e| e.to_string())?;
 
         let antes = {
-            let mut stmt = tx.prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes WHERE id = ?1")
+            let mut stmt = tx.prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador FROM pacientes WHERE id = ?1")
                 .map_err(|e| e.to_string())?;
             let mut p = stmt.query_row([id], |row| {
                 self.para_paciente(row)
@@ -988,7 +979,7 @@ impl BancoDados {
         let nome_cifrado = self.cifrar_campo(Some(&paciente.nome)).unwrap_or_else(|| paciente.nome.clone());
 
         tx.execute(
-            "UPDATE pacientes SET numero_prontuario=?1, cpf=?2, nome=?3, data_exame=?4, idade=?5, sexo=?6, polipo=?7, resultado_histopatologico=?8, indicacao_exame=?9 WHERE id=?10",
+            "UPDATE pacientes SET numero_prontuario=?1, cpf=?2, nome=?3, data_exame=?4, idade=?5, sexo=?6, polipo=?7, resultado_histopatologico=?8, indicacao_exame=?9, examinador=?10 WHERE id=?11",
             params![
                 paciente.numero_prontuario,
                 cpf_cifrado,
@@ -999,6 +990,7 @@ impl BancoDados {
                 paciente.polipo,
                 laudo_cifrado,
                 paciente.indicacao_exame,
+                paciente.examinador,
                 id
             ],
         ).map_err(|e| e.to_string())?;
@@ -1020,7 +1012,7 @@ impl BancoDados {
         let tx = conn.transaction().map_err(|e| e.to_string())?;
 
         let antes = {
-            let mut stmt = tx.prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame FROM pacientes WHERE id = ?1")
+            let mut stmt = tx.prepare("SELECT id, numero_prontuario, cpf, nome, data_exame, idade, sexo, polipo, resultado_histopatologico, indicacao_exame, examinador FROM pacientes WHERE id = ?1")
                 .map_err(|e| e.to_string())?;
             let res = stmt.query_row([id_paciente], |row| {
                 self.para_paciente(row)
@@ -1730,7 +1722,7 @@ mod tests {
                 grau: 1,
                 idade_diagnostico: Some(60),
             }],
-            endoscopista: None,
+            examinador: None,
         };
 
         let pid = db.cadastrar("mateus", &p).unwrap();
@@ -1872,7 +1864,7 @@ mod tests {
             comorbidades: vec![],
             sintomas: vec![],
             historico_familiar: vec![],
-            endoscopista: None,
+            examinador: None,
         };
         let pid_novo = db.cadastrar("mateus", &p_novo).unwrap();
         

@@ -11,7 +11,7 @@ use crate::math::fleiss::{amostra_survey, amostra_comparativa, AmostraSurvey, Am
 use crate::math::descriptive::{
     frequencias, estratificar, prevalencia_polipo, ItemFrequencia, EstatDescritiva, Prevalencia
 };
-use crate::math::quality::{indicadores_por_endoscopista, ResultadoIndicadorQualidade};
+use crate::math::quality::{indicadores_por_examinador, ResultadoIndicadorQualidade};
 
 use tauri::State;
 use std::sync::Mutex;
@@ -253,7 +253,7 @@ pub fn calcular_qui_quadrado_geral(
 pub fn obter_indicadores_qualidade(state: State<'_, DbState>) -> Result<Vec<ResultadoIndicadorQualidade>, String> {
     let db = state.0.lock().map_err(|e| e.to_string())?;
     let pacientes = db.listar()?;
-    Ok(indicadores_por_endoscopista(&pacientes))
+    Ok(indicadores_por_examinador(&pacientes))
 }
 
 #[tauri::command]
@@ -299,7 +299,7 @@ pub fn exportar_pacientes_csv(state: State<'_, DbState>) -> Result<String, Strin
 
     // UTF-8 BOM
     let mut csv = String::from("\u{FEFF}");
-    csv.push_str("Prontuário;CPF;Nome;Data do Exame;Idade;Sexo;Pólipos;Endoscopista;Indicação;Resultado Histopatológico\n");
+    csv.push_str("Prontuário;CPF;Nome;Data do Exame;Idade;Sexo;Pólipos;Examinador;Indicação;Resultado Histopatológico\n");
 
     for p in pacientes {
         let prontuario = sanitizar_csv_cell(&p.numero_prontuario);
@@ -309,13 +309,13 @@ pub fn exportar_pacientes_csv(state: State<'_, DbState>) -> Result<String, Strin
         let idade = p.idade.to_string();
         let sexo = sanitizar_csv_cell(&p.sexo);
         let polipo = p.polipo.to_string();
-        let endoscopista = sanitizar_csv_cell(p.endoscopista.as_deref().unwrap_or(""));
+        let examinador = sanitizar_csv_cell(p.examinador.as_deref().unwrap_or(""));
         let indicacao = sanitizar_csv_cell(&p.indicacao_exame);
         let resultado = sanitizar_csv_cell(p.resultado_histopatologico.as_deref().unwrap_or(""));
 
         csv.push_str(&format!(
             "{};{};{};{};{};{};{};{};{};{}\n",
-            prontuario, cpf, nome, data_exame, idade, sexo, polipo, endoscopista, indicacao, resultado
+            prontuario, cpf, nome, data_exame, idade, sexo, polipo, examinador, indicacao, resultado
         ));
     }
 

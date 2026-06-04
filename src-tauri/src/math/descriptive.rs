@@ -114,7 +114,7 @@ pub fn obter_campo_paciente_valores(p: &Paciente, campo: &str) -> Vec<String> {
         "sexo" => vec![p.sexo.clone()],
         "polipo" => vec![p.polipo.to_string()],
         "indicacao_exame" => vec![p.indicacao_exame.clone()],
-        "endoscopista" => vec![p.endoscopista.clone().unwrap_or_else(|| "Sem endoscopista".to_string())],
+        "examinador" => vec![p.examinador.clone().unwrap_or_else(|| "Sem examinador".to_string())],
         "comorbidades" => p.comorbidades.clone(),
         "sintomas" => p.sintomas.clone(),
         _ => vec![],

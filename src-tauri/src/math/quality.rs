@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultadoIndicadorQualidade {
-    pub endoscopista: String,
+    pub examinador: String,
     pub n_exames: usize,
     pub n_polipos: usize,
     pub pdr: f64,
@@ -15,7 +15,7 @@ pub struct ResultadoIndicadorQualidade {
     pub adr_ic: (f64, f64),
 }
 
-pub fn indicadores_por_endoscopista(
+pub fn indicadores_por_examinador(
     pacientes: &[Paciente],
 ) -> Vec<ResultadoIndicadorQualidade> {
     if pacientes.is_empty() {
@@ -24,10 +24,13 @@ pub fn indicadores_por_endoscopista(
 
     let mut agrupados: HashMap<String, Vec<&Paciente>> = HashMap::new();
     for p in pacientes {
-        let medico = p
-            .endoscopista
+        let mut medico = p
+            .examinador
             .clone()
-            .unwrap_or_else(|| "Sem endoscopista".to_string());
+            .unwrap_or_default();
+        if medico.trim().is_empty() {
+            medico = "Sem examinador".to_string();
+        }
         agrupados.entry(medico).or_default().push(p);
     }
 
@@ -53,7 +56,7 @@ pub fn indicadores_por_endoscopista(
         let adr_ic = wilson_ci(n_adenomas, n_exames, 0.05);
 
         resultados.push(ResultadoIndicadorQualidade {
-            endoscopista: medico,
+            examinador: medico,
             n_exames,
             n_polipos,
             pdr,
@@ -64,8 +67,8 @@ pub fn indicadores_por_endoscopista(
         });
     }
 
-    // Ordena pelo nome do endoscopista (case insensitive / lowercase)
-    resultados.sort_by(|a, b| a.endoscopista.to_lowercase().cmp(&b.endoscopista.to_lowercase()));
+    // Ordena pelo nome do examinador (case insensitive / lowercase)
+    resultados.sort_by(|a, b| a.examinador.to_lowercase().cmp(&b.examinador.to_lowercase()));
 
     resultados
 }

@@ -21,7 +21,8 @@ import {
   Sliders,
   Play,
   Copy,
-  ChevronDown
+  ChevronDown,
+  BarChart3
 } from "lucide-react";
 import {
   pacienteSchema,
@@ -29,6 +30,7 @@ import {
   converterParaISO,
   formatarCPF
 } from "./validation";
+import DashboardPanel from "./DashboardPanel";
 import "./App.css";
 
 // ──────────────────────────── TIPOS ────────────────────────────
@@ -54,7 +56,7 @@ interface Paciente {
   comorbidades: string[];
   sintomas: string[];
   historico_familiar: HistoricoFamiliar[];
-  endoscopista?: string | null;
+  examinador?: string | null;
 }
 
 interface EntradaAuditoria {
@@ -84,7 +86,7 @@ interface InconsistenciaDados {
 }
 
 interface ResultadoIndicadorQualidade {
-  endoscopista: string;
+  examinador: string;
   n_exames: number;
   n_polipos: number;
   pdr: number;
@@ -172,6 +174,11 @@ interface ResultadoMantelHaenszel {
   graus_liberdade: number;
 }
 
+// ──────────────────────────── HELPERS ──────────────────────────────────
+const cleanUserPrefix = (name: string): string => {
+  return name.replace(/^(dr\.?\s*)/i, "");
+};
+
 // ──────────────────────────── APP PRINCIPAL ────────────────────────────
 
 export default function App() {
@@ -179,7 +186,7 @@ export default function App() {
   const [isSetup, setIsSetup] = useState(false); // se precisa cadastrar senha
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState("Mateus");
-  const [activeTab, setActiveTab] = useState<"pacientes" | "calculadores" | "auditoria">("pacientes");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "pacientes" | "calculadores" | "auditoria">("pacientes");
 
   // Alertas globais
   const [alert, setAlert] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
@@ -193,7 +200,11 @@ export default function App() {
     try {
       const nome = await invoke<string | null>("obter_nome_usuario");
       if (nome) {
-        setCurrentUser(nome);
+        const cleanNome = cleanUserPrefix(nome);
+        if (cleanNome !== nome) {
+          await invoke("definir_nome_usuario", { nome: cleanNome });
+        }
+        setCurrentUser(cleanNome);
       } else {
         await invoke("definir_nome_usuario", { nome: "Mateus" });
         setCurrentUser("Mateus");
@@ -284,6 +295,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeTab === "dashboard"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Dashboard</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("calculadores")}
               className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                 activeTab === "calculadores"
@@ -353,6 +376,7 @@ export default function App() {
 
         {/* Content Wrapper */}
         <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-950/50">
+          {activeTab === "dashboard" && <DashboardPanel showMsg={showMsg} />}
           {activeTab === "pacientes" && <PacientePanel currentUser={currentUser} showMsg={showMsg} />}
           {activeTab === "calculadores" && <StatCalcPanel showMsg={showMsg} />}
           {activeTab === "auditoria" && <AuditPanel currentUser={currentUser} setCurrentUser={setCurrentUser} showMsg={showMsg} />}
@@ -581,7 +605,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
   const [formComorbidades, setFormComorbidades] = useState<string[]>([]);
   const [formSintomas, setFormSintomas] = useState<string[]>([]);
   const [formHistorico, setFormHistorico] = useState<HistoricoFamiliar[]>([]);
-  const [formEndoscopista, setFormEndoscopista] = useState("");
+  const [formExaminador, setFormExaminador] = useState("");
 
   // Modais de catálogo customizados
   const [addComorbidadeNome, setAddComorbidadeNome] = useState("");
@@ -659,7 +683,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
     setFormComorbidades([]);
     setFormSintomas([]);
     setFormHistorico([]);
-    setFormEndoscopista("");
+    setFormExaminador("");
     setFormErrors({});
     setModalAberto(true);
   };
@@ -679,7 +703,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
     setFormComorbidades(p.comorbidades);
     setFormSintomas(p.sintomas);
     setFormHistorico(p.historico_familiar);
-    setFormEndoscopista(p.endoscopista || "");
+    setFormExaminador(p.examinador || "");
     setFormErrors({});
     setModalAberto(true);
   };
@@ -728,7 +752,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
       comorbidades: formComorbidades,
       sintomas: formSintomas,
       historico_familiar: formHistorico,
-      endoscopista: formEndoscopista.trim() || null,
+      examinador: formExaminador.trim() || null,
     };
 
     try {
@@ -925,7 +949,7 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                         {p.polipo}
                       </span>
                     </td>
-                    <td className="p-4 text-slate-400 text-xs">{p.endoscopista || "Desconhecido"}</td>
+                    <td className="p-4 text-slate-400 text-xs">{p.examinador || "Desconhecido"}</td>
                     <td className="p-4">
                       <div className="flex justify-center gap-2">
                         <button
@@ -1004,7 +1028,6 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                       type="text"
                       value={formNome}
                       onChange={(e) => setFormNome(e.target.value)}
-                      placeholder="Ex: Maria das Dores"
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
                     {formErrors.nome && <span className="text-xs text-red-400 mt-1 block">{formErrors.nome}</span>}
@@ -1016,9 +1039,8 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
                     <label className="text-xs text-slate-400 font-semibold block mb-1">Examinador (Opcional)</label>
                     <input
                       type="text"
-                      value={formEndoscopista}
-                      onChange={(e) => setFormEndoscopista(e.target.value)}
-                      placeholder="Ex: Mateus Campelo"
+                      value={formExaminador}
+                      onChange={(e) => setFormExaminador(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
                     />
                   </div>
@@ -1418,7 +1440,7 @@ function QualidadeIndicators({ showMsg }: { showMsg: (type: "success" | "error" 
         </div>
       )}
 
-      {/* Tabela de Qualidade por Endoscopista */}
+      {/* Tabela de Qualidade por Examinador */}
       <div className="space-y-4">
         <div>
           <h3 className="text-lg font-bold">Indicadores de Qualidade por Examinador</h3>
@@ -1448,8 +1470,8 @@ function QualidadeIndicators({ showMsg }: { showMsg: (type: "success" | "error" 
                   const adrPercent = q.adr * 100;
                   const belowTarget = adrPercent < 25.0;
                   return (
-                    <tr key={q.endoscopista} className="hover:bg-slate-900/20 transition-colors">
-                      <td className="p-4 font-semibold text-slate-100">{q.endoscopista}</td>
+                    <tr key={q.examinador} className="hover:bg-slate-900/20 transition-colors">
+                      <td className="p-4 font-semibold text-slate-100">{q.examinador}</td>
                       <td className="p-4 text-center font-mono text-slate-400">{q.n_exames}</td>
                       <td className="p-4 text-center">
                         <span className="font-bold">{(q.pdr * 100).toFixed(1)}%</span>
@@ -2361,13 +2383,14 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
   }, [currentUser]);
 
   const salvarNomeUsuario = async () => {
-    if (!novoNomeUsuario.trim()) {
+    const cleaned = cleanUserPrefix(novoNomeUsuario.trim());
+    if (!cleaned) {
       showMsg("error", "O nome do profissional não pode ser vazio.");
       return;
     }
     try {
-      await invoke("definir_nome_usuario", { nome: novoNomeUsuario.trim() });
-      setCurrentUser(novoNomeUsuario.trim());
+      await invoke("definir_nome_usuario", { nome: cleaned });
+      setCurrentUser(cleaned);
       showMsg("success", "Identificação do profissional atualizada com sucesso!");
     } catch (e) {
       showMsg("error", "Erro ao salvar nome do profissional: " + String(e));
@@ -2504,7 +2527,6 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
             value={novoNomeUsuario}
             onChange={(e) => setNovoNomeUsuario(e.target.value)}
             className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-250 font-medium"
-            placeholder="Ex: Mateus Campelo"
           />
           <button
             onClick={salvarNomeUsuario}

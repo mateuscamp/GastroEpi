@@ -93,7 +93,7 @@ export const pacienteSchema = z.object({
   comorbidades: z.array(z.string()),
   sintomas: z.array(z.string()),
   historico_familiar: z.array(historicoFamiliarSchema),
-  endoscopista: z.string().optional().nullable(),
+  examinador: z.string().optional().nullable(),
 });
 
 export type PacienteFormType = z.infer<typeof pacienteSchema>;
