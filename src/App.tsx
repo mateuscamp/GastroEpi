@@ -375,7 +375,7 @@ export default function App() {
         )}
 
         {/* Content Wrapper */}
-        <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-950/50">
+        <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-950/50" style={{ willChange: "transform" }}>
           {activeTab === "dashboard" && <DashboardPanel showMsg={showMsg} />}
           {activeTab === "pacientes" && <PacientePanel currentUser={currentUser} showMsg={showMsg} />}
           {activeTab === "calculadores" && <StatCalcPanel showMsg={showMsg} />}

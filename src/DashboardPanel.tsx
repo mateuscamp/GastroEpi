@@ -365,7 +365,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
           
           {/* Side Filters Panel */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-5 lg:col-span-1 shadow-lg backdrop-blur-sm">
+          <div className="bg-slate-900/95 border border-slate-800 rounded-xl p-5 space-y-5 lg:col-span-1 shadow-lg">
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2 pb-2 border-b border-slate-800">
               <Filter className="h-4 w-4 text-indigo-400" />
               Filtros Dinâmicos
@@ -469,7 +469,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <PieIcon className="h-4 w-4 text-pink-400" />
                   Distribuição por Sexo
                 </h4>
-                <div className="h-56">
+                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
                   <SvgPieChart data={pieDataSexo} />
                 </div>
               </div>
@@ -480,7 +480,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-indigo-400" />
                   Distribuição por Faixa Etária (Anos)
                 </h4>
-                <div className="h-56">
+                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={faixaEtariaCounts} colorFrom="#4f46e5" colorTo="#818cf8" />
                   ) : (
@@ -495,7 +495,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-emerald-400" />
                   Distribuição de Pólipos por Paciente
                 </h4>
-                <div className="h-56">
+                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={polipoCounts} colorFrom="#10b981" colorTo="#34d399" />
                   ) : (
@@ -510,7 +510,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-sky-400" />
                   Histórico Familiar (Relação de Maior Risco)
                 </h4>
-                <div className="h-56">
+                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={barDataFamiliar} colorFrom="#0ea5e9" colorTo="#38bdf8" />
                   ) : (
@@ -525,7 +525,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <Calendar className="h-4 w-4 text-rose-400" />
                   Série Temporal: Exames Realizados por Mês
                 </h4>
-                <div className="h-52">
+                <div className="h-52" style={{ contain: "paint", willChange: "transform" }}>
                   {lineDataExames.length > 0 ? (
                     <SvgLineChart data={lineDataExames} />
                   ) : (
@@ -542,7 +542,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <Activity className="h-4 w-4 text-yellow-400" />
                   Comorbidades mais Frequentes (Top 15)
                 </h4>
-                <div>
+                <div style={{ contain: "paint", willChange: "transform" }}>
                   {topComorbidades.length > 0 ? (
                     <HorizontalBarChart data={topComorbidades} />
                   ) : (
@@ -677,7 +677,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
             </div>
 
             {/* Details table without PII */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-4" style={{ contentVisibility: "auto", containIntrinsicSize: "0 500px" }}>
               <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-200">
