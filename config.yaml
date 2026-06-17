@@ -1,0 +1,19 @@
+# Arquivo de configuração do Dexter
+# O target_path foi omitido para usar implicitamente o próprio diretório do projeto.
+
+# Pastas a ignorar na análise estática
+exclude_dirs:
+  - ".git"
+  - "node_modules"
+  - "venv"
+  - ".venv"
+  - "target"
+  - "dist"
+
+# Configuração de Banco de Dados para a suíte 'database' (opcional)
+# database_type: "sqlite"
+# database_rel_path: "path/to/db.sqlite"
+
+# Configurações do LLM para a suíte 'llm_audit' (opcional)
+# ollama_url: "http://localhost:11434"
+# ollama_model: "qwen2.5-coder:14b"
