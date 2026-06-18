@@ -4,14 +4,14 @@
 
 ---
 
-## 🚀 Download (Executáveis Prontos)
+## Download (Executáveis Prontos)
 
 Você não precisa compilar o código fonte para usar o GastroEpi. Você pode baixar os instaladores prontos para uso diretamente do GitHub:
 
 ### [👉 Clique aqui para baixar a versão mais recente](https://github.com/mateuscamp/GastroEpi/releases/latest)
 
 No link acima, acesse a seção **Assets** e baixe o instalador do seu sistema operacional:
-*   **💻 Windows:** Baixe o instalador executável `.exe` (ex: `GastroEpi_0.1.15_x64-setup.exe`) ou o pacote `.msi`.
+*   **🪟 Windows:** Baixe o instalador executável `.exe` (ex: `GastroEpi_0.1.15_x64-setup.exe`) ou o pacote `.msi`.
 *   **🍎 macOS (Apple Silicon):** Baixe o arquivo `.dmg` (ex: `GastroEpi_0.1.15_aarch64.dmg`).
 *   **🐧 Linux:** Baixe o pacote `.deb` (Ubuntu/Debian), `.AppImage` ou `.rpm`.
 
