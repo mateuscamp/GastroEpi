@@ -702,37 +702,37 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
-                          <th className="py-2.5">Prontuário</th>
-                          <th className="py-2.5">Data Exame</th>
-                          <th className="py-2.5">Idade / Faixa Etária</th>
-                          <th className="py-2.5 text-center">Sexo</th>
-                          <th className="py-2.5 text-right">Pólipos</th>
-                          <th className="py-2.5 text-right">Nº Comorb.</th>
-                          <th className="py-2.5">Hist. Familiar</th>
+                          <th className="py-2.5 px-3">Prontuário</th>
+                          <th className="py-2.5 px-3">Data Exame</th>
+                          <th className="py-2.5 px-3">Idade / Faixa Etária</th>
+                          <th className="py-2.5 px-3 text-center">Sexo</th>
+                          <th className="py-2.5 px-3 text-right">Pólipos</th>
+                          <th className="py-2.5 px-3 text-right">Nº Comorb.</th>
+                          <th className="py-2.5 px-3">Hist. Familiar</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedList.map((p, idx) => (
                           <tr key={p.id || idx} className="border-b border-slate-800/60 hover:bg-slate-850/30 text-slate-300">
-                            <td className="py-3.5 font-mono font-medium text-slate-100">
+                            <td className="py-3.5 px-3 font-mono font-medium text-slate-100">
                               {p.numero_prontuario}
                             </td>
-                            <td className="py-3.5">
+                            <td className="py-3.5 px-3">
                               {formatarDataExame(p.data_exame)}
                             </td>
-                            <td className="py-3.5 text-slate-300">
+                            <td className="py-3.5 px-3 text-slate-300">
                               {p.idade} <span className="text-slate-500">/</span> <span className="text-slate-400">{getFaixaEtaria(p.idade)}</span>
                             </td>
-                            <td className="py-3.5 text-center">
+                            <td className="py-3.5 px-3 text-center">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 p.sexo === "M" ? "bg-sky-950/40 text-sky-400 border border-sky-900/30" : "bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-900/30"
                               }`}>
                                 {p.sexo}
                               </span>
                             </td>
-                            <td className="py-3.5 text-right font-mono">{p.polipo}</td>
-                            <td className="py-3.5 text-right">{p.comorbidades?.length || 0}</td>
-                            <td className="py-3.5 text-slate-400">{getMenorGrauFamiliar(p)}</td>
+                            <td className="py-3.5 px-3 text-right font-mono">{p.polipo}</td>
+                            <td className="py-3.5 px-3 text-right">{p.comorbidades?.length || 0}</td>
+                            <td className="py-3.5 px-3 text-slate-400">{getMenorGrauFamiliar(p)}</td>
                           </tr>
                         ))}
                       </tbody>
