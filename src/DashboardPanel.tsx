@@ -703,11 +703,11 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                       <thead>
                         <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
                           <th className="py-2.5 px-3">Prontuário</th>
-                          <th className="py-2.5 px-3">Data Exame</th>
-                          <th className="py-2.5 px-3">Idade / Faixa Etária</th>
-                          <th className="py-2.5 px-3 text-center">Sexo</th>
-                          <th className="py-2.5 px-3 text-right">Pólipos</th>
-                          <th className="py-2.5 px-3 text-center">Nº Comorb.</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800">Data Exame</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800">Idade / Faixa Etária</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800 text-center">Sexo</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800 text-right">Pólipos</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800 text-center">Nº Comorb.</th>
                           <th className="py-2.5 px-3 pl-5 border-l border-slate-800">Hist. Familiar</th>
                         </tr>
                       </thead>
@@ -717,21 +717,21 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                             <td className="py-3.5 px-3 font-mono font-medium text-slate-100">
                               {p.numero_prontuario}
                             </td>
-                            <td className="py-3.5 px-3">
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70">
                               {formatarDataExame(p.data_exame)}
                             </td>
-                            <td className="py-3.5 px-3 text-slate-300">
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70 text-slate-300">
                               {p.idade} <span className="text-slate-500">/</span> <span className="text-slate-400">{getFaixaEtaria(p.idade)}</span>
                             </td>
-                            <td className="py-3.5 px-3 text-center">
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70 text-center">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 p.sexo === "M" ? "bg-sky-950/40 text-sky-400 border border-sky-900/30" : "bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-900/30"
                               }`}>
                                 {p.sexo}
                               </span>
                             </td>
-                            <td className="py-3.5 px-3 text-right font-mono">{p.polipo}</td>
-                            <td className="py-3.5 px-3 text-center">
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70 text-right font-mono">{p.polipo}</td>
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70 text-center">
                               <span className="inline-flex min-w-7 justify-center rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 font-mono text-slate-200">
                                 {p.comorbidades?.length || 0}
                               </span>
