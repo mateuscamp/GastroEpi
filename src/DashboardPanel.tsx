@@ -707,8 +707,8 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                           <th className="py-2.5 px-3">Idade / Faixa Etária</th>
                           <th className="py-2.5 px-3 text-center">Sexo</th>
                           <th className="py-2.5 px-3 text-right">Pólipos</th>
-                          <th className="py-2.5 px-3 text-right">Nº Comorb.</th>
-                          <th className="py-2.5 px-3">Hist. Familiar</th>
+                          <th className="py-2.5 px-3 text-center">Nº Comorb.</th>
+                          <th className="py-2.5 px-3 pl-5 border-l border-slate-800">Hist. Familiar</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -731,8 +731,16 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                               </span>
                             </td>
                             <td className="py-3.5 px-3 text-right font-mono">{p.polipo}</td>
-                            <td className="py-3.5 px-3 text-right">{p.comorbidades?.length || 0}</td>
-                            <td className="py-3.5 px-3 text-slate-400">{getMenorGrauFamiliar(p)}</td>
+                            <td className="py-3.5 px-3 text-center">
+                              <span className="inline-flex min-w-7 justify-center rounded-md border border-slate-700 bg-slate-900 px-2 py-0.5 font-mono text-slate-200">
+                                {p.comorbidades?.length || 0}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-3 pl-5 border-l border-slate-800/70 text-slate-400">
+                              <span className="inline-flex rounded-md border border-indigo-900/40 bg-indigo-950/20 px-2 py-0.5 text-[11px] font-medium text-indigo-200">
+                                {getMenorGrauFamiliar(p)}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
