@@ -4,6 +4,24 @@
 
 ---
 
+## 🚀 Download (Executáveis Prontos)
+
+Você não precisa compilar o código fonte para usar o GastroEpi. Você pode baixar os instaladores prontos para uso diretamente do GitHub:
+
+### [👉 Clique aqui para baixar a versão mais recente](https://github.com/mateuscamp/GastroEpi/releases/latest)
+
+No link acima, acesse a seção **Assets** e baixe o instalador do seu sistema operacional:
+*   **💻 Windows:** Baixe o instalador executável `.exe` (ex: `GastroEpi_0.1.15_x64-setup.exe`) ou o pacote `.msi`.
+*   **🍎 macOS (Apple Silicon):** Baixe o arquivo `.dmg` (ex: `GastroEpi_0.1.15_aarch64.dmg`).
+*   **🐧 Linux:** Baixe o pacote `.deb` (Ubuntu/Debian), `.AppImage` ou `.rpm`.
+
+> [!TIP]
+> **Nota de Instalação (macOS/Windows):** 
+> * No **macOS**, se vir um aviso de "desenvolvedor não identificado", clique com o **botão direito** sobre o ícone do aplicativo e escolha **Abrir** para autorizar o sistema.
+> * No **Windows**, se o SmartScreen aparecer, clique em **Mais informações** e em seguida em **Executar assim mesmo**.
+
+---
+
 ## Funcionalidades Principais
 
 *   **Segurança Extrema (LGPD):** 100% offline. Criptografia em repouso de dados pessoais sensíveis (CPF) e laudos de biópsia usando AES-256-GCM com chaves derivadas de senha mestre via KDF Argon2id.
