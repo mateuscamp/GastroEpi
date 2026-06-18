@@ -4,22 +4,22 @@
 
 ---
 
-## 🚀 Funcionalidades Principais
+## Funcionalidades Principais
 
-*   **🔒 Segurança Extrema (LGPD):** 100% offline. Criptografia em repouso de dados pessoais sensíveis (CPF) e laudos de biópsia usando AES-256-GCM com chaves derivadas de senha mestre via KDF Argon2id.
-*   **⛓️ Cadeia de Auditoria Verificável (Hash-Chain):** Registros de todas as operações (criar, editar, excluir) gravados em tabela SQLite append-only protegida por triggers e encadeados por hashes SHA-256. Detecção imediata de adulterações externas.
-*   **📊 StatCalc Engine (Epi Info Rust):**
+*   **Segurança Extrema (LGPD):** 100% offline. Criptografia em repouso de dados pessoais sensíveis (CPF) e laudos de biópsia usando AES-256-GCM com chaves derivadas de senha mestre via KDF Argon2id.
+*   **Cadeia de Auditoria Verificável (Hash-Chain):** Registros de todas as operações (criar, editar, excluir) gravados em tabela SQLite append-only protegida por triggers e encadeados por hashes SHA-256. Detecção imediata de adulterações externas.
+*   **StatCalc Engine (Epi Info Rust):**
     *   Tabela de contingência 2x2 com Odds Ratio, Risco Relativo, Qui-Quadrado (Pearson, Yates) e Teste Exato de Fisher.
     *   Acurácia diagnóstica (Sensibilidade, Especificidade, VPP, VPN, Razão de Verossimilhança) com intervalos de confiança de Wilson de 95%.
     *   Cálculo de tamanho amostral (survey com correção de população finita e coorte comparativa via fórmula de Fleiss).
     *   Teste de Tendência Linear Cochran-Armitage.
     *   Acompanhamento de Indicadores de Qualidade (ADR e PDR) por endoscopista com avisos visuais.
-*   **📤 Exportação Segura:** Geração de relatórios CSV formatados para Excel (pt-BR) com proteção integrada contra CSV Injection.
+*   **Exportação Segura:** Geração de relatórios CSV formatados para Excel (pt-BR) com proteção integrada contra CSV Injection.
 
 
 ---
 
-## 📥 Instalação e Configuração
+## Instalação e Configuração
 
 Para obter o código fonte e instalar as dependências do projeto localmente:
 
@@ -43,7 +43,7 @@ npm install
 
 ---
 
-## 🛠️ Requisitos de Ambiente
+## Requisitos de Ambiente
 
 *   **Node.js** (versão 18+) e **npm**
 *   **Rust** (cargo e compilador `rustc` versão 1.75+)
@@ -51,7 +51,7 @@ npm install
 
 ---
 
-## 💻 Comandos Úteis
+## Comandos Úteis
 
 ### 1. Ambiente de Desenvolvimento
 Para rodar o aplicativo localmente com hot-reload no frontend e recompilação automática do backend Rust:
@@ -82,7 +82,7 @@ npm run build
 
 ---
 
-## 📂 Estrutura de Diretórios Importante
+## Estrutura de Diretórios Importante
 
 *   `src/`: Contém a interface em React e TypeScript.
     *   [App.tsx](file:///home/mateus/GastroEpi/src/App.tsx): Dashboard de controle principal (LockScreen, Cadastro Clínico, StatCalc e Auditoria).
