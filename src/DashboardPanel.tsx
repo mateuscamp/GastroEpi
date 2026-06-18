@@ -704,8 +704,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                         <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
                           <th className="py-2.5">Prontuário</th>
                           <th className="py-2.5">Data Exame</th>
-                          <th className="py-2.5 text-right">Idade</th>
-                          <th className="py-2.5">Faixa Etária</th>
+                          <th className="py-2.5">Idade / Faixa Etária</th>
                           <th className="py-2.5 text-center">Sexo</th>
                           <th className="py-2.5 text-right">Pólipos</th>
                           <th className="py-2.5 text-right">Nº Comorb.</th>
@@ -721,8 +720,9 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                             <td className="py-3.5">
                               {formatarDataExame(p.data_exame)}
                             </td>
-                            <td className="py-3.5 text-right">{p.idade}</td>
-                            <td className="py-3.5 text-slate-400">{getFaixaEtaria(p.idade)}</td>
+                            <td className="py-3.5 text-slate-300">
+                              {p.idade} <span className="text-slate-500">/</span> <span className="text-slate-400">{getFaixaEtaria(p.idade)}</span>
+                            </td>
                             <td className="py-3.5 text-center">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 p.sexo === "M" ? "bg-sky-950/40 text-sky-400 border border-sky-900/30" : "bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-900/30"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Lock,
@@ -58,6 +58,42 @@ interface Paciente {
   historico_familiar: HistoricoFamiliar[];
   examinador?: string | null;
 }
+
+type PacienteSortKey =
+  | "numero_prontuario"
+  | "nome"
+  | "idade"
+  | "data_exame"
+  | "indicacao_exame"
+  | "polipo"
+  | "examinador";
+
+type SortDirection = "asc" | "desc";
+
+const pacienteSortLabels: Record<PacienteSortKey, string> = {
+  numero_prontuario: "Prontuário",
+  nome: "Nome",
+  idade: "Idade / Sexo",
+  data_exame: "Data do Exame",
+  indicacao_exame: "Indicação",
+  polipo: "Pólipos",
+  examinador: "Examinador",
+};
+
+const pacienteSortFallbacks: PacienteSortKey[] = [
+  "nome",
+  "numero_prontuario",
+  "idade",
+  "data_exame",
+  "indicacao_exame",
+  "polipo",
+  "examinador",
+];
+
+const pacienteTextCollator = new Intl.Collator("pt-BR", {
+  numeric: true,
+  sensitivity: "base",
+});
 
 interface EntradaAuditoria {
   id?: number | null;
@@ -583,6 +619,8 @@ interface PacientePanelProps {
 
 function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const [sortKey, setSortKey] = useState<PacienteSortKey>("nome");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [termoBusca, setTermoBusca] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
@@ -624,6 +662,94 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
       return `${numerosLimitados.slice(0, 2)}/${numerosLimitados.slice(2)}`;
     }
     return `${numerosLimitados.slice(0, 2)}/${numerosLimitados.slice(2, 4)}/${numerosLimitados.slice(4)}`;
+  };
+
+  const getSortValue = (p: Paciente, key: PacienteSortKey): string | number => {
+    switch (key) {
+      case "numero_prontuario":
+        return p.numero_prontuario || "";
+      case "nome":
+        return p.nome || "";
+      case "idade":
+        return p.idade ?? 0;
+      case "data_exame":
+        return p.data_exame || "";
+      case "indicacao_exame":
+        return p.indicacao_exame || "";
+      case "polipo":
+        return p.polipo ?? 0;
+      case "examinador":
+        return p.examinador?.trim() || "Desconhecido";
+      default:
+        return "";
+    }
+  };
+
+  const compareSortValue = (a: string | number, b: string | number) => {
+    if (typeof a === "number" && typeof b === "number") {
+      return a - b;
+    }
+    return pacienteTextCollator.compare(String(a), String(b));
+  };
+
+  const comparePacientesAsc = (a: Paciente, b: Paciente, key: PacienteSortKey) => {
+    return compareSortValue(getSortValue(a, key), getSortValue(b, key));
+  };
+
+  const pacientesOrdenados = useMemo(() => {
+    return [...pacientes].sort((a, b) => {
+      const primary = comparePacientesAsc(a, b, sortKey);
+      if (primary !== 0) {
+        return sortDirection === "asc" ? primary : -primary;
+      }
+
+      for (const fallbackKey of pacienteSortFallbacks) {
+        if (fallbackKey === sortKey) continue;
+        const fallback = comparePacientesAsc(a, b, fallbackKey);
+        if (fallback !== 0) return fallback;
+      }
+
+      return (a.id ?? 0) - (b.id ?? 0);
+    });
+  }, [pacientes, sortDirection, sortKey]);
+
+  const alterarOrdenacao = (key: PacienteSortKey) => {
+    if (key === sortKey) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const SortHeader = ({
+    sortField,
+    className = "",
+  }: {
+    sortField: PacienteSortKey;
+    className?: string;
+  }) => {
+    const active = sortField === sortKey;
+    return (
+      <th className={`p-4 ${className}`}>
+        <button
+          type="button"
+          onClick={() => alterarOrdenacao(sortField)}
+          className={`inline-flex items-center gap-1.5 rounded-md transition-colors cursor-pointer ${
+            className.includes("center") ? "justify-center" : "justify-start"
+          } ${active ? "text-indigo-300" : "text-slate-400 hover:text-slate-200"}`}
+          title={`Ordenar por ${pacienteSortLabels[sortField]}`}
+        >
+          <span>{pacienteSortLabels[sortField]}</span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${
+              active ? "opacity-100" : "opacity-30"
+            } ${active && sortDirection === "desc" ? "rotate-180" : ""}`}
+          />
+        </button>
+      </th>
+    );
   };
 
   useEffect(() => {
@@ -915,18 +1041,18 @@ function PacientePanel({ currentUser, showMsg }: PacientePanelProps) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 bg-slate-950/40">
-                  <th className="p-4">Prontuário</th>
-                  <th className="p-4">Nome</th>
-                  <th className="p-4">Idade / Sexo</th>
-                  <th className="p-4">Data do Exame</th>
-                  <th className="p-4">Indicação</th>
-                  <th className="p-4 text-center">Pólipos</th>
-                  <th className="p-4">Examinador</th>
+                  <SortHeader sortField="numero_prontuario" />
+                  <SortHeader sortField="nome" />
+                  <SortHeader sortField="idade" />
+                  <SortHeader sortField="data_exame" />
+                  <SortHeader sortField="indicacao_exame" />
+                  <SortHeader sortField="polipo" className="text-center" />
+                  <SortHeader sortField="examinador" />
                   <th className="p-4 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-sm text-slate-200">
-                {pacientes.map((p) => (
+                {pacientesOrdenados.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
                     <td className="p-4 font-mono text-xs font-semibold text-slate-400">{p.numero_prontuario}</td>
                     <td className="p-4 font-semibold text-slate-100">{p.nome}</td>
@@ -2501,7 +2627,7 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
   const criarBackupManual = async () => {
     setExecutingCheck(true);
     setConsoleOutput([]);
-    addConsoleLog("Iniciando procedimento de backup online...");
+    addConsoleLog("Iniciando procedimento de Live Backup...");
     try {
       const res = await invoke<{ caminho: string; timestamp: string; removidos: string[] }>("realizar_backup", { maxBackups: 5 });
       addConsoleLog(`Backup criado em: ${res.caminho}`);
@@ -2584,7 +2710,7 @@ function AuditPanel({ currentUser, setCurrentUser, showMsg }: AuditPanelProps) {
           className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:border-slate-700 transition-all gap-2 text-center text-xs font-semibold hover:shadow-lg disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className="h-6 w-6 text-indigo-400" />
-          <span>Backup Online</span>
+          <span>Live Backup</span>
         </button>
       </div>
 
