@@ -469,7 +469,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <PieIcon className="h-4 w-4 text-pink-400" />
                   Distribuição por Sexo
                 </h4>
-                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
+                <div className="h-56">
                   <SvgPieChart data={pieDataSexo} />
                 </div>
               </div>
@@ -480,7 +480,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-indigo-400" />
                   Distribuição por Faixa Etária (Anos)
                 </h4>
-                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
+                <div className="h-56">
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={faixaEtariaCounts} colorFrom="#4f46e5" colorTo="#818cf8" />
                   ) : (
@@ -495,7 +495,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-emerald-400" />
                   Distribuição de Pólipos por Paciente
                 </h4>
-                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
+                <div className="h-56">
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={polipoCounts} colorFrom="#10b981" colorTo="#34d399" />
                   ) : (
@@ -510,7 +510,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <BarChart3 className="h-4 w-4 text-sky-400" />
                   Histórico Familiar (Relação de Maior Risco)
                 </h4>
-                <div className="h-56" style={{ contain: "paint", willChange: "transform" }}>
+                <div className="h-56">
                   {totalPacientes > 0 ? (
                     <SvgBarChart data={barDataFamiliar} colorFrom="#0ea5e9" colorTo="#38bdf8" />
                   ) : (
@@ -525,7 +525,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <Calendar className="h-4 w-4 text-rose-400" />
                   Série Temporal: Exames Realizados por Mês
                 </h4>
-                <div className="h-52" style={{ contain: "paint", willChange: "transform" }}>
+                <div className="h-52">
                   {lineDataExames.length > 0 ? (
                     <SvgLineChart data={lineDataExames} />
                   ) : (
@@ -542,7 +542,7 @@ export default function DashboardPanel({ showMsg }: DashboardPanelProps) {
                   <Activity className="h-4 w-4 text-yellow-400" />
                   Comorbidades mais Frequentes (Top 15)
                 </h4>
-                <div style={{ contain: "paint", willChange: "transform" }}>
+                <div>
                   {topComorbidades.length > 0 ? (
                     <HorizontalBarChart data={topComorbidades} />
                   ) : (
@@ -907,6 +907,7 @@ interface SvgBarChartProps {
 
 function SvgBarChart({ data, colorFrom, colorTo }: SvgBarChartProps) {
   const maxVal = Math.max(...data.map(d => d.value), 0);
+  const total = data.reduce((sum, d) => sum + d.value, 0);
 
   if (maxVal === 0) {
     return (
@@ -921,12 +922,13 @@ function SvgBarChart({ data, colorFrom, colorTo }: SvgBarChartProps) {
       <div className="flex flex-1 items-end gap-3 h-40 px-2 border-b border-slate-800/80">
         {data.map((item, idx) => {
           const heightPercent = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
+          const percentage = total > 0 ? (item.value / total) * 100 : 0;
           return (
             <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
               
               {/* Tooltip */}
-              <div className="absolute -top-7 bg-slate-950 text-[10px] px-2 py-0.5 rounded text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-10 shadow-lg border border-slate-800 font-medium">
-                {item.value} Paciente{item.value !== 1 ? 's' : ''}
+              <div className="absolute -top-8 bg-slate-950 text-[10px] px-2 py-1 rounded text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-30 shadow-xl border border-slate-800 font-medium">
+                {item.value} Paciente{item.value !== 1 ? 's' : ''} ({percentage.toFixed(1)}%)
               </div>
 
               {/* Bar */}
