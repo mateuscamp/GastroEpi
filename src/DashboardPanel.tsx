@@ -924,16 +924,14 @@ function SvgBarChart({ data, colorFrom, colorTo }: SvgBarChartProps) {
           const heightPercent = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
           const percentage = total > 0 ? (item.value / total) * 100 : 0;
           return (
-            <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
-              
-              {/* Tooltip */}
-              <div className="absolute -top-8 bg-slate-950 text-[10px] px-2 py-1 rounded text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-30 shadow-xl border border-slate-800 font-medium">
-                {item.value} Paciente{item.value !== 1 ? 's' : ''} ({percentage.toFixed(1)}%)
-              </div>
-
+            <div
+              key={idx}
+              className="flex-1 flex flex-col items-center group relative h-full justify-end cursor-pointer"
+              title={`${item.value} Paciente${item.value !== 1 ? 's' : ''} (${percentage.toFixed(1)}%)`}
+            >
               {/* Bar */}
               <div
-                className="w-full rounded-t-md transition-all duration-300 group-hover:opacity-90 relative cursor-pointer"
+                className="w-full rounded-t-md transition-all duration-300 group-hover:opacity-90 relative"
                 style={{
                   height: `${Math.max(heightPercent, 2)}%`,
                   background: `linear-gradient(to top, ${colorFrom}, ${colorTo})`
