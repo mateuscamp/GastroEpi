@@ -18,7 +18,7 @@ No link acima, acesse a seção **Assets** e baixe o instalador do seu sistema o
 > [!TIP]
 > **Nota de Instalação (macOS/Windows):** 
 > * No **macOS**, se vir um aviso de "desenvolvedor não identificado", clique com o **botão direito** sobre o ícone do aplicativo e escolha **Abrir** para autorizar o sistema. Caso esta opção não esteja disponível, digite no terminal:
-> * `xattr -cr /Applications/GastroEpi.app`
+>   `xattr -cr /Applications/GastroEpi.app`
 > * No **Windows**, se o SmartScreen aparecer, clique em **Mais informações** e em seguida em **Executar assim mesmo**.
 
 ---
