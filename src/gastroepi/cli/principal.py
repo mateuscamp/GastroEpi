@@ -12,6 +12,7 @@ import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from gastroepi.dominio.ficticios import gerar_fichas
 from gastroepi.servicos import (
@@ -24,14 +25,29 @@ from gastroepi.servicos import (
 )
 from gastroepi.servicos.acesso import Sessao
 
+if TYPE_CHECKING:
+    from gastroepi.ui_qt.janela_principal import JanelaPrincipal
+
 SENHA_DA_DEMO = "demonstração do gastroepi"
 USUARIO_DA_DEMO = "Demonstração"
+SENHA_DO_SMOKE = "autoteste do gastroepi congelado"
 
 
 def _abrir_app(pasta: Path | None, sessao: Sessao | None) -> int:
     from gastroepi.ui_qt.aplicacao import rodar  # só aqui: o resto da CLI não carrega o Qt
 
     return rodar(pasta, sessao)
+
+
+def _abrir_e_fechar(pasta: Path, sessao: Sessao) -> int:
+    """Abre a janela desbloqueada, desenha uma vez e fecha (o `--smoke`, ADR-0006)."""
+    from gastroepi.ui_qt.aplicacao import processar_eventos, rodar
+
+    janelas: list[JanelaPrincipal] = []
+    codigo = rodar(pasta, sessao, ao_abrir=janelas.append, laco_de_eventos=processar_eventos)
+    for janela in janelas:
+        janela.close()  # fechar a janela fecha a sessão
+    return codigo
 
 
 def _escrever_erro(texto: str) -> None:
@@ -46,11 +62,13 @@ class Terminal:
     escrever_erro: Callable[[str], None] = _escrever_erro
     ler_senha: Callable[[str], str] = getpass.getpass
     abrir_app: Callable[[Path | None, Sessao | None], int] = field(default=_abrir_app)
+    abrir_e_fechar: Callable[[Path, Sessao], int] = field(default=_abrir_e_fechar)
 
 
 def _argumentos() -> argparse.ArgumentParser:
     raiz = argparse.ArgumentParser(prog="gastroepi", description="Registro de colonoscopia")
     raiz.add_argument("--pasta", type=Path, help="pasta do cofre (padrão: a do app)")
+    raiz.add_argument("--smoke", action="store_true", help="autoteste do executável (ADR-0006)")
     comandos = raiz.add_subparsers(dest="comando")
     demo = comandos.add_parser("demo", help="cofre de pacientes fictícios, e abre o app")
     demo.add_argument("--semente", type=int, default=42)
@@ -66,6 +84,8 @@ def _argumentos() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None, terminal: Terminal | None = None) -> int:
     terminal = terminal or Terminal()
     args = _argumentos().parse_args(argv)
+    if args.smoke:
+        return _smoke(terminal)
     if args.comando is None:
         return terminal.abrir_app(args.pasta, None)
     if args.comando == "demo":
@@ -104,6 +124,26 @@ def _demo(args: argparse.Namespace, terminal: Terminal) -> int:
         sessao.fechar()
         return 0
     return terminal.abrir_app(pasta, sessao)
+
+
+def _smoke(terminal: Terminal) -> int:
+    """Autoteste do executável congelado: cofre temporário, 1 fictício, janela, reabertura."""
+    with tempfile.TemporaryDirectory(prefix="gastroepi-smoke-") as nome:
+        pasta = Path(nome)
+        sessao, _ = acesso.criar_cofre(pasta, SENHA_DO_SMOKE, SENHA_DO_SMOKE)
+        pacientes.cadastrar(sessao, gerar_fichas(semente=1, quantidade=1)[0], "smoke")
+        janela = terminal.abrir_e_fechar(pasta, sessao)
+        with acesso.desbloquear(pasta, SENHA_DO_SMOKE) as reaberta:
+            ok = integridade.verificar(reaberta).ok
+            cadastrados = len(pacientes.listar(reaberta))
+    if janela == 0 and ok and cadastrados == 1:
+        terminal.escrever("smoke ok: cofre criado, 1 paciente fictício, janela, integridade ok")
+        return 0
+    situacao = "ok" if ok else "REPROVADA"
+    terminal.escrever_erro(
+        f"smoke FALHOU: janela {janela}, integridade {situacao}, pacientes {cadastrados}"
+    )
+    return 1
 
 
 def _verificar(sessao: Sessao, args: argparse.Namespace, terminal: Terminal) -> int:

@@ -18,9 +18,16 @@ class TerminalFalso:
     saida: list[str] = field(default_factory=list)
     erros: list[str] = field(default_factory=list)
     aberturas: list[tuple[Path | None, Sessao | None]] = field(default_factory=list)
+    codigo_da_janela: int = 0
 
     def terminal(self) -> Terminal:
-        return Terminal(self.saida.append, self.erros.append, self._ler_senha, self._abrir_app)
+        return Terminal(
+            self.saida.append,
+            self.erros.append,
+            self._ler_senha,
+            self._abrir_app,
+            self._abrir_e_fechar,
+        )
 
     def _ler_senha(self, pergunta: str) -> str:
         return self.senha
@@ -30,6 +37,12 @@ class TerminalFalso:
         if sessao is not None:
             sessao.fechar()
         return 0
+
+    def _abrir_e_fechar(self, pasta: Path, sessao: Sessao) -> int:
+        self.aberturas.append((pasta, sessao))
+        assert len(pacientes.listar(sessao)) == 1
+        sessao.fechar()
+        return self.codigo_da_janela
 
 
 @pytest.fixture
@@ -158,3 +171,24 @@ def test_backup_sem_destino_externo(falso: TerminalFalso, tmp_path: Path) -> Non
 
     assert main(["--pasta", str(tmp_path), "backup"], falso.terminal()) == 0
     assert len(falso.saida) == 1
+
+
+def test_smoke_cadastra_abre_a_janela_reabre_e_sai_com_zero(falso: TerminalFalso) -> None:
+    assert main(["--smoke"], falso.terminal()) == 0
+
+    ((pasta, _),) = falso.aberturas
+    assert pasta is not None and not pasta.exists()  # a pasta temporária some no fim
+    assert falso.saida == ["smoke ok: cofre criado, 1 paciente fictício, janela, integridade ok"]
+
+
+def test_smoke_falha_se_a_janela_falha(falso: TerminalFalso) -> None:
+    falso.codigo_da_janela = 1
+
+    assert main(["--smoke"], falso.terminal()) == 1
+    assert falso.erros == ["smoke FALHOU: janela 1, integridade ok, pacientes 1"]
+
+
+def test_smoke_de_verdade_com_a_janela_qt(capsys: pytest.CaptureFixture[str]) -> None:
+    """O mesmo caminho do `GastroEpi.exe --smoke` no CI (ADR-0006), com o Qt de verdade."""
+    assert main(["--smoke"]) == 0
+    assert capsys.readouterr().out.startswith("smoke ok")
