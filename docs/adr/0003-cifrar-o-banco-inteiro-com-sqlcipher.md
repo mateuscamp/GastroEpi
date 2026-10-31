@@ -116,3 +116,34 @@ Regra derivada no `AGENTS.md`: "Só `persistencia` importa `sqlcipher3`" e as li
 
 Autor: Mateus Campelo · Criado em: 2026-10-31 · Aprovado em: 2026-10-31
 Estende: 0002
+
+**Detalhamento da implementação (2026-10-31, Fase 2):**
+- Recovery key: base32 de Crockford (sem I, L, O, U), 8 blocos de 8. Cada bloco tem 7
+  símbolos de dados e 1 dígito Luhn mod 32, como os blocos da chave do BitLocker. Assim
+  o erro aponta o bloco ("confira o bloco 3"). Os 56 símbolos somam 280 bits: os 256 da
+  chave e 24 de enchimento, que têm de ser zero. Na leitura, a caixa, os espaços e os
+  hífens não importam, e O/I/L valem 0/1. O dígito detecta toda substituição de um
+  caractere e 99,8% das trocas de vizinhos.
+- `gastroepi.chave` v1: `{"formato", "versao", "kdf": {"algoritmo", "t", "m_kib", "p",
+  "sal"}, "embrulho": {"algoritmo", "nonce", "chave"}}`, com binários em base64.
+  - O cabeçalho (formato, versão e kdf) é o dado associado do GCM.
+  - A leitura recusa parâmetros diferentes de t=3, m=65536 KiB e p=4.
+  - A senha vai em NFC (RFC 8265).
+  - O arquivo é gravado num temporário, com fsync, e trocado por `os.replace`.
+- Toda conexão roda `PRAGMA cipher_log_level = NONE` logo após o `PRAGMA key`. Sem
+  isso, a chave errada escreve `ERROR CORE … hmac check failed` no stderr do processo.
+  O app já traduz essa falha em `ChaveIncorreta`, e o executável sem console não teria
+  onde mostrar a linha.
+- Página 1 corrompida e chave errada dão o mesmo erro (`ChaveIncorreta`): as duas falham
+  no HMAC da primeira página. Corrupção em outra página vira `BancoCorrompido` na
+  leitura e aparece no `cipher_integrity_check`.
+- O rekey faz `PRAGMA wal_checkpoint(TRUNCATE)`. Em WAL, as páginas recifradas ficam
+  no `-wal`, e o `.db` guarda as da chave antiga até um checkpoint.
+- "Gerar nova recovery key" grava o `gastroepi.chave` com a chave nova antes do
+  `PRAGMA rekey`. Se o app cair entre os dois, a senha não abre, mas a recovery key
+  antiga (no papel) ainda abre e `recuperar_acesso` refaz o arquivo. Na ordem inversa,
+  o banco ficaria numa chave que ninguém viu.
+- Backups feitos antes de um rekey continuam na chave antiga. Rotação e validade
+  ficam no ADR-0005.
+- O snapshot da auditoria é a ficha inteira em JSON, sem sanitização, porque o arquivo
+  já é cifrado. Nenhum `repr` nem mensagem de erro mostra o snapshot.

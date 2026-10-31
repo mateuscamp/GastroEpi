@@ -2,17 +2,17 @@
 
 ## Feature Overview
 
-A local clinical and epidemiological management system for colonoscopy and colorectal cancer (CRC) screening. It provides patient management with field-level encryption, database audit logging with hash-chain verification, and advanced analytical calculations (inspired by Epi Info's StatCalc).
+A local clinical and epidemiological management system for colonoscopy and colorectal cancer (CRC) screening. It provides patient management in a fully encrypted database (SQLCipher), audit logging with HMAC hash-chain verification, and advanced analytical calculations (inspired by Epi Info's StatCalc).
 
 ---
 
 ## Functional Requirements
 
 ### 1. Database Security & Initialization (SEC)
-- **FR-1.1 (Master Password Setup):** Upon first run, the system must prompt the user to set a master password (minimum 8 characters). It must derive an encryption key via Argon2id and create an encrypted canary payload.
-- **FR-1.2 (Recovery Key):** After setting the password, the system must display a Fernet-compatible recovery key formatted in blocks of 8 characters separated by spaces.
-- **FR-1.3 (Unlock Canary):** On subsequent boots, the user must input the master password. The system must verify it by decrypting the canary.
-- **FR-1.4 (Field-level Encryption):** Sensible fields (`cpf` and `resultado_histopatologico`) must be encrypted before storage using AES-256-GCM.
+- **FR-1.1 (Master Password Setup):** Upon first run, the system must prompt the user to set a master password twice (minimum 8 characters). It generates a random 256-bit data key and stores it in `gastroepi.chave`, wrapped (AES-256-GCM) by a key derived from the password via Argon2id (ADR-0003).
+- **FR-1.2 (Recovery Key):** After setting the password, the system must display the recovery key once: the data key itself in Crockford base32, 8 blocks of 8 characters separated by spaces, each block ending in a check digit. It opens the database even without `gastroepi.chave`.
+- **FR-1.3 (Unlock):** On subsequent boots, the user must input the master password. A wrong password fails to unwrap the data key (GCM tag); a wrong recovery key fails to open the database.
+- **FR-1.4 (Whole-file Encryption):** The whole database file (every table, the WAL and every backup) is encrypted with SQLCipher 4 under the data key. There is no field-level encryption (ADR-0003).
 
 ### 2. Patient Management (PAT)
 - **FR-2.1 (Unique Prontuário):** Every patient record must have a unique internal record ID (Prontuário, mandatory).
@@ -23,7 +23,7 @@ A local clinical and epidemiological management system for colonoscopy and color
 ### 3. Auditing & Integrity (AUD)
 - **FR-3.1 (Append-only Audit Log):** Every action (CADASTRAR, EDITAR, EXCLUIR) must write a row to the audit table with UTC timestamp, username, and JSON snapshots.
 - **FR-3.2 (SQLite Triggers):** The database schema must contain SQLite triggers preventing any UPDATE or DELETE operations on the `auditoria` table.
-- **FR-3.3 (Hash-chaining):** Each row in the audit log must contain a SHA-256 hash calculated from its fields combined with the hash of the preceding row.
+- **FR-3.3 (Hash-chaining):** Each row in the audit log must contain an HMAC-SHA256 link (`v2:`) calculated from its fields combined with the link of the preceding row, keyed by a dedicated audit key stored inside the encrypted database (ADR-0003).
 - **FR-3.4 (Integrity Check):** The system must provide a routine to verify the entire hash-chain and check the semantic coherence of current patient states against the audit snapshots.
 
 ### 4. Epidemiological Analytics (StatCalc)
