@@ -93,9 +93,15 @@ def transacao(conexao: sqlcipher3.Connection, modo: str = "IMMEDIATE") -> Iterat
 
 
 def trocar_chave(conexao: sqlcipher3.Connection, nova: bytes) -> None:
-    """`PRAGMA rekey`: recifra todas as páginas com a chave nova; a antiga deixa de abrir."""
+    """`PRAGMA rekey`: recifra todas as páginas com a chave nova; a antiga deixa de abrir.
+
+    Em WAL, as páginas recifradas vão para o -wal, e o .db segue com as da chave antiga
+    até um checkpoint: o `cipher_integrity_check` acusaria todas. O checkpoint TRUNCATE
+    leva tudo para o .db na hora e esvazia o -wal (achado da Fase 2, 2026-10-31).
+    """
     _conferir_tamanho(nova)
     conexao.execute(_pragma_de_chave("rekey", nova))
+    conexao.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
 def paginas_corrompidas(conexao: sqlcipher3.Connection) -> tuple[str, ...]:

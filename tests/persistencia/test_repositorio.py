@@ -365,6 +365,7 @@ def test_trocar_chave_preserva_cadeia_e_dados(
 
     repositorio.trocar_chave(OUTRA_CHAVE)
 
+    assert repositorio.verificar_paginas() == ()
     assert repositorio.verificar().ok
     repositorio.fechar()
     with pytest.raises(ChaveIncorreta):

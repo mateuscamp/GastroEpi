@@ -10,6 +10,7 @@ from gastroepi.persistencia.conexao import (
     ChaveIncorreta,
     abrir_conexao,
     copiar_banco,
+    paginas_corrompidas,
     transacao,
     trocar_chave,
 )
@@ -94,6 +95,20 @@ def test_trocar_chave_recifra_o_banco_e_a_antiga_deixa_de_abrir(
     nova = abrir_conexao(caminho, OUTRA_CHAVE)
     assert nova.execute("SELECT v FROM t").fetchone()[0] == "segredo-de-teste"
     nova.close()
+
+
+def test_logo_apos_trocar_a_chave_todas_as_paginas_conferem(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    """Em WAL, o rekey escreve as páginas recifradas no -wal; sem checkpoint, o .db
+    continua com páginas da chave antiga e o cipher_integrity_check as acusa."""
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    conexao.executemany("INSERT INTO t VALUES (?)", [("x" * 500,)] * 200)
+
+    trocar_chave(conexao, OUTRA_CHAVE)
+
+    assert paginas_corrompidas(conexao) == ()
+    conexao.close()
 
 
 def test_copia_do_banco_sai_cifrada_com_a_mesma_chave(
