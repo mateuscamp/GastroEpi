@@ -15,7 +15,7 @@ suporte. Só existem dados fictícios, então o formato em disco pode ser redese
 sem migração.
 
 O projeto já foi Python uma vez (`~/GastroEpidemio`, NiceGUI) e saiu dele para
-"eliminar o interpretador Python e o servidor WebSocket local" (`PLAN.md`). O
+"eliminar o interpretador Python e o servidor WebSocket local" (`PLAN.md` da tag `v0.1.16`). O
 ADR-0001 (Proposto, 2026-10-24) recomendou ficar no Tauri e citou "Python reabre
 empacotamento" como custo. O fato novo é a mudança de objetivo: a linguagem está
 decidida. Este ADR registra a decisão e escolhe a estrutura.
