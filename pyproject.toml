@@ -6,6 +6,7 @@ readme = "README.md"
 authors = [{ name = "Mateus Campelo", email = "mateuscampelob@gmail.com" }]
 requires-python = ">=3.13,<3.15"
 dependencies = [
+    "pydantic>=2.14.2",
     "sqlcipher3>=0.6.4",
 ]
 
@@ -35,6 +36,8 @@ sequence = [
   { cmd = "mypy" },
   { cmd = "lint-imports" },
   { cmd = "pytest --cov --cov-report=term-missing:skip-covered" },
+  # Fase 1: o domínio é a única validação do app, então 100% dos ramos (PLANO, Fase 1).
+  { cmd = "coverage report --include=*/gastroepi/dominio/* --fail-under=100 --skip-covered" },
 ]
 
 [tool.pytest.ini_options]
@@ -57,6 +60,12 @@ skip_empty = true
 python_version = "3.13"
 strict = true
 files = ["src", "tests", "ferramentas"]
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 # Só para o editor achar a .venv; o portão de tipos é o mypy.
 [tool.pyright]
