@@ -60,3 +60,4 @@ build/
 
 # Cofre do GastroEpi (ADR-0003): o arquivo de chave nunca vai para o repositório
 *.chave
+capturas/

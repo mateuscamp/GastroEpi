@@ -10,9 +10,13 @@ dependencies = [
     "cryptography>=50.0.2",
     "numpy>=2.5.4",
     "pydantic>=2.14.2",
+    "pyside6-essentials>=6.12.0",
     "scipy>=1.18.1",
     "sqlcipher3>=0.6.4",
 ]
+
+[project.scripts]
+gastroepi = "gastroepi.cli.principal:main"
 
 [dependency-groups]
 dev = [
@@ -22,6 +26,7 @@ dev = [
     "poethepoet>=0.49.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
+    "pytest-qt>=4.5.0",
     "pytest-socket>=0.8.1",
     "ruff>=0.17.3",
     "scipy-stubs>=1.18.1.1",
@@ -51,6 +56,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 # Princípio I: a suíte inteira roda sem rede; um teste que abra socket falha.
 addopts = ["--disable-socket", "--strict-markers", "-q"]
+# Fase 5: a casca roda em QT_QPA_PLATFORM=offscreen (tests/conftest.py).
+qt_api = "pyside6"
 markers = [
   "referencia: teste estatístico com valor de referência citado (R, Epi Info ou artigo)",
 ]
