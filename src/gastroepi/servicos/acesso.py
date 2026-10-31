@@ -15,6 +15,9 @@ Os erros que a casca precisa tratar são reexportados daqui: ela não importa `c
 `persistencia` (ADR-0002).
 """
 
+import os
+import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from gastroepi.cofre.arquivo_de_chave import (
@@ -31,6 +34,7 @@ from gastroepi.cofre.recovery_key import (
     ler_recovery_key,
 )
 from gastroepi.dominio.senha import conferir_nova_senha
+from gastroepi.dominio.usuario import USUARIO_PADRAO, Usuario
 from gastroepi.persistencia.backups import (
     CopiaReprovada,
     listar_backups,
@@ -72,12 +76,19 @@ __all__ = [
     "Sessao",
     "cofre_existe",
     "criar_cofre",
+    "definir_nome_do_usuario",
     "desbloquear",
     "gerar_nova_recovery_key",
+    "nome_do_usuario",
+    "pasta_padrao",
     "recuperar_acesso",
     "restaurar_backup",
     "trocar_senha",
 ]
+
+
+_NOME_DO_USUARIO = "nome_usuario"
+PASTA_DO_APP = "GastroEpi"
 
 
 class CofreJaExiste(FileExistsError):
@@ -202,3 +213,26 @@ def gerar_nova_recovery_key(sessao: Sessao, senha: str) -> str:
     repositorio_de(sessao).trocar_chave(nova)
     fazer_backup(sessao)  # uma cópia na chave nova, a única que a restauração oferece
     return formatar_recovery_key(nova)
+
+
+def pasta_padrao(ambiente: Mapping[str, str] = os.environ, plataforma: str = sys.platform) -> Path:
+    """Pasta fixa do cofre, escolha do dono (2026-10-31): `%LOCALAPPDATA%\\GastroEpi` no
+    Windows, fora de Documentos (que costuma estar no OneDrive); `$XDG_DATA_HOME/GastroEpi`
+    (ou `~/.local/share/GastroEpi`) nos outros sistemas."""
+    if plataforma == "win32" and ambiente.get("LOCALAPPDATA"):
+        return Path(ambiente["LOCALAPPDATA"]) / PASTA_DO_APP
+    if ambiente.get("XDG_DATA_HOME"):
+        return Path(ambiente["XDG_DATA_HOME"]) / PASTA_DO_APP
+    return Path.home() / ".local" / "share" / PASTA_DO_APP
+
+
+def nome_do_usuario(sessao: Sessao) -> str:
+    """O nome gravado na auditoria; sem nome definido, `USUARIO_PADRAO`."""
+    return repositorio_de(sessao).ler_preferencia(_NOME_DO_USUARIO) or USUARIO_PADRAO
+
+
+def definir_nome_do_usuario(sessao: Sessao, nome: str) -> str:
+    """Valida no domínio (levanta `ValidationError`) e devolve o nome aparado."""
+    usuario = Usuario(nome=nome)
+    repositorio_de(sessao).gravar_preferencia(_NOME_DO_USUARIO, usuario.nome)
+    return usuario.nome

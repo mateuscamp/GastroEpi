@@ -32,6 +32,9 @@ NOMES_PROIBIDOS = {
     "handler", "processar", "base", "comum", "item", "obj", "data", "service",
 }  # fmt: skip
 
+# Métodos que o Qt chama pelo nome (QAbstractItemModel.data): renomear quebra o modelo.
+SOBRESCRITAS_DO_QT = {"data"}
+
 # ADR-0002: as fronteiras são exatamente estas pastas. Pacote novo exige ADR antes.
 FRONTEIRAS = {
     "dominio", "cofre", "auditoria", "persistencia", "estatistica", "exportacao",
@@ -156,6 +159,10 @@ def test_nomes_publicos_sao_grepaveis() -> None:
             if not isinstance(no, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 continue
             palavras = tokens_do_nome(no.name)
+            if no.name in SOBRESCRITAS_DO_QT and relativo(caminho).startswith(
+                "src/gastroepi/ui_qt/"
+            ):
+                continue
             if not no.name.startswith("_") and palavras and set(palavras) <= NOMES_PROIBIDOS:
                 ruins.append(f"{relativo(caminho)}:{no.lineno}: nome genérico '{no.name}'")
     assert not ruins, "\n" + "\n".join(ruins)
