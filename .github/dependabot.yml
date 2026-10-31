@@ -1,0 +1,18 @@
+# Depois do corte (Fase 7) só há Python (uv.lock) e as actions do CI; cargo e npm saíram com o Tauri.
+# Toda atualização passa pelos portões do python.yml, inclusive o pip-audit e o --smoke do instalador.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -448,6 +448,20 @@ teste, que é do Mateus.
 - README em Python; tag `v0.2.0` com o instalador.
 - Os PRs do Dependabot de cargo/npm perdem o objeto e são fechados, com o seu OK.
 
+Feito em 2026-10-31, menos a tag e o fechamento dos PRs, que esperam o merge e o OK do dono.
+Nada em Python lia mais o oráculo vivo, exceto `test_paridade.py`, que lia `src-tauri/src/lib.rs`;
+a lista dos 35 comandos foi congelada em `tests/fixtures/comandos_tauri_v0_1_16.json`. Saíram junto
+`ferramentas/oraculo_rust/` e o job "oráculo v0.1.16 congelado". Os fixtures ficam como registro
+da paridade, e a fonte de cada um é a tag `v0.1.16`:
+
+| Fixture | Gerado por, na tag `v0.1.16` |
+|---|---|
+| `oraculo_rust_v0_1_16.json5` | `ferramentas/oraculo_rust/` (crate que inclui `src-tauri/src/math/`) |
+| `vetores_validacao_v0_1_16.json` | `src/validation.ts`, rodado no Node |
+| `comandos_tauri_v0_1_16.json` | `generate_handler!` de `src-tauri/src/lib.rs`, lido com `git show v0.1.16:` |
+
+Regerar qualquer um exige um checkout dessa tag; nenhum é editado à mão.
+
 ## Paridade: os 35 comandos da v0.1.16
 
 | Grupo | Comandos Tauri | Destino em Python |
@@ -483,10 +497,9 @@ tabela aplica `pacientes.corresponde_ao_termo`, a regra de `buscar_por_termo`.
 | ★ Durabilidade | Banco estragado → somente leitura + oferta; cópia ruim nunca ganha o nome; rotação por data; pasta sincronizada recusada (ADR-0005) | Atômica + holística (hypothesis), contínua | CI | Qualquer linha da Governança do ADR-0005 |
 | Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
 | Legibilidade | `tests/arquitetura` + `mypy --strict` | Atômica, contínua | CI + pre-commit | Arquivo > 400, função > 40, erro de tipo |
-| Paridade | `test_paridade.py`: os 35 comandos do `lib.rs` com destino em `servicos` citado pela casca | Atômica, contínua | CI | Comando sem destino ou sem tela |
+| Paridade | `test_paridade.py`: os 35 comandos do `lib.rs` da v0.1.16 (`comandos_tauri_v0_1_16.json`) com destino em `servicos` citado pela casca | Atômica, contínua | CI | Comando sem destino ou sem tela |
 | Casca estável | `test_casca.py`: nenhum `connect` com lambda ou closure (segfault do PySide) | Atômica, contínua | CI | Qualquer achado |
 | Revisão visual | Capturas das telas como artefato do CI | Manual, a cada PR da casca | Revisor | Tela cortada ou confusa |
-| Oráculo congelado | Diff do PR em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | Atômica, contínua | CI | Qualquer mudança |
 
 ## Contrato para o agente
 
@@ -495,5 +508,5 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 ## Próximo passo
 
 Mateus roda `docs/ROTEIRO-WINDOWS.md` na máquina Windows de teste com o instalador do CI; passou,
-a Fase 7 (corte do Tauri e tag `v0.2.0`) começa. A Fase 3b (relatório fechado) continua
+sai a tag `v0.2.0` com o instalador (o corte do Tauri da Fase 7 já está feito). A Fase 3b (relatório fechado) continua
 esperando a lista de perguntas do dono.

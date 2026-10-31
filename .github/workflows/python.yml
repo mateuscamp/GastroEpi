@@ -1,6 +1,5 @@
 # Portões da reescrita em Python (ADR-0002, ADR-0003).
 # Cada job corresponde a uma linha de Governança de um ADR; ao remover um, atualizar o ADR.
-# O build.yml do Tauri continua até o corte (Fase 7).
 
 name: python
 
@@ -49,27 +48,6 @@ jobs:
           name: capturas-${{ matrix.os }}
           path: capturas/
           if-no-files-found: error
-
-  oraculo-congelado:
-    name: oráculo v0.1.16 congelado
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # ADR-0002: src-tauri/ e o frontend TS são referência; não mudam até o corte.
-      - name: Nenhuma mudança no código Tauri/TS
-        run: |
-          mudados=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- \
-            src-tauri 'src/*.ts' 'src/*.tsx' 'src/*.css' src/assets \
-            package.json package-lock.json index.html vite.config.ts 'tsconfig*.json' public)
-          if [ -n "$mudados" ]; then
-            echo "::error::o oráculo v0.1.16 é congelado (ADR-0002); mudanças em:"
-            echo "$mudados"
-            exit 1
-          fi
 
   sonda-sqlcipher:
     name: sonda do SQLCipher congelado (windows)

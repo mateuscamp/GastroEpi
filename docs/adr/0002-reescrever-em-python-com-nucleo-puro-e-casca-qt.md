@@ -93,7 +93,7 @@ trocada sem mexer no núcleo.
 | ★ Adulteração detectada (Cenário 3) | Teste: altera 1 linha por `sqlite3` externo → verificação | CI | Não acusa a primeira entrada afetada |
 | Legibilidade | `tests/arquitetura`: arquivo ≤ 400 linhas, função ≤ 40 | CI + pre-commit | Qualquer arquivo ou função acima |
 | Tipos | `mypy --strict src/` | CI | Qualquer erro |
-| Oráculo congelado | CI compara o PR com `main` em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | CI | Qualquer mudança (o oráculo mora em `ferramentas/oraculo_rust/`) |
+| Oráculo congelado | Retirada no corte (Fase 7, 2026-10-31): o código Rust/TS saiu e a tag `v0.1.16` o preserva; ficam os fixtures em `tests/fixtures/`, gerados dessa tag | — | — |
 | Roda no Windows | Job `windows-latest`: `uv run pytest`; job `instalador`: build + `--smoke` do instalado (ADR-0006) | CI | Teste falha; instalador > 250 MB ou `--smoke` > 8 s |
 
 Regra derivada no `AGENTS.md`: seção "Fronteiras (ADR-0002)".

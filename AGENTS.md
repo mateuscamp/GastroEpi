@@ -1,7 +1,8 @@
 # GastroEpi
 
 App desktop offline para registro de colonoscopia e epidemiologia de câncer colorretal.
-Em reescrita de Tauri (Rust + TS) para Python: ADR-0002 (Aceito) e `docs/PLANO-REESCRITA-PYTHON.md`.
+Reescrito de Tauri (Rust + TS) para Python: ADR-0002 (Aceito) e `docs/PLANO-REESCRITA-PYTHON.md`.
+A v0.1.16 em Tauri ficou na tag `v0.1.16`; o código saiu no corte (Fase 7).
 Arquitetura: monólito modular · Quantum: 1 executável, 1 banco. ADRs em `docs/adr/`. Princípios em `CONSTITUTION.md` (prevalecem).
 
 ## Comandos
@@ -17,13 +18,6 @@ Arquitetura: monólito modular · Quantum: 1 executável, 1 banco. ADRs em `docs
   no `.spec`, com o motivo; o `--smoke` do instalador no CI é o portão.
 
 Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
-
-## Transição
-
-- Oráculo congelado da v0.1.16, não editar: `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json`.
-- Fixtures em `tests/fixtures/`: `oraculo_rust_v0_1_16.json5` (gerado por `ferramentas/oraculo_rust/`) e
-  `vetores_validacao_v0_1_16.json` (gerado do `src/validation.ts` no Node). Nunca editar à mão.
-- Se Python e oráculo divergirem, decide o valor de referência citado (R, Epi Info, artigo). Registrar a divergência no commit.
 
 ## Fronteiras (ADR-0002)
 
@@ -71,6 +65,8 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 - I/O com fake nomeado e injetado (relógio, sistema de arquivos). Banco: SQLite real em `tmp_path`, nunca mock.
 - Para `src/gastroepi/<modulo>/<arquivo>.py` existe `tests/<modulo>/test_<arquivo>.py`.
 - A suíte inteira roda em ≤ 60 s. Passou disso, é bug de teste.
+- Os fixtures `*_v0_1_16.*` de `tests/fixtures/` são o registro da paridade, gerados da tag `v0.1.16`
+  (fonte de cada um no PLANO, Fase 7). Nunca editar à mão; contra eles, decide o valor de referência citado.
 
 ## Estilo
 
