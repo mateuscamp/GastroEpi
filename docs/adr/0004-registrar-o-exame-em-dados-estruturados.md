@@ -135,3 +135,16 @@ Regra derivada no `AGENTS.md`: "Texto livre (`observacao`, `laudo_texto`) nunca 
 
 Autor: Mateus Campelo · Criado em: 2026-10-31 · Aprovado em: 2026-10-31
 Estende: 0002, 0003
+
+**Detalhamento das listas (2026-10-31, Fase 1, escolhas do dono):**
+- Parentesco (grau da genética médica, não o do Código Civil): 1º pai, mãe, irmão/irmã,
+  filho/filha; 2º avô/avó, tio/tia, sobrinho/sobrinha, neto/neta, meio-irmão/meia-irmã;
+  3º primo/prima, bisavô/bisavó, tio-avô/tia-avó.
+- Motivo de não intubação cecal: preparo inadequado, lesão obstrutiva ou estenose,
+  dificuldade técnica, intolerância ou sedação insuficiente, colite grave, intercorrência
+  clínica ou complicação, outro (com texto).
+- "Aguardando/sem histologia" vira dois itens: só "aguardando" deixa o exame pendente. A
+  displasia é coerente com a histologia: adenoma convencional exige baixo ou alto grau;
+  hiperplásico, aguardando e sem histologia exigem "não se aplica".
+- Entre os campos de qualidade, só a intubação cecal é obrigatória; Boston (os 3
+  segmentos ou nenhum) e tempo de retirada (minutos, com decimal) podem faltar.
