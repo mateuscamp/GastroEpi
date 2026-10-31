@@ -15,12 +15,15 @@ Três comandos não têm função própria, de propósito:
 
 import ast
 import importlib
+import json
 from pathlib import Path
 
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
 CASCA = RAIZ / "src" / "gastroepi" / "ui_qt"
+# Os comandos do generate_handler! da v0.1.16, congelados no corte (Fase 7).
+COMANDOS_V0_1_16 = RAIZ / "tests" / "fixtures" / "comandos_tauri_v0_1_16.json"
 
 # comando da v0.1.16 → (módulo de servicos, função ou classe que a casca usa)
 PARIDADE: dict[str, tuple[str, str]] = {
@@ -87,12 +90,7 @@ NOMES, MODULOS = _nomes_e_modulos_da_casca()
 
 
 def test_sao_os_35_comandos_da_v0_1_16() -> None:
-    comandos_rust = (RAIZ / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
-    registrados = {
-        linha.strip().rstrip(",").removeprefix("commands::")
-        for linha in comandos_rust.splitlines()
-        if linha.strip().startswith("commands::")
-    }
+    registrados = set(json.loads(COMANDOS_V0_1_16.read_text(encoding="utf-8"))["comandos"])
     assert len(PARIDADE) == 35
     assert set(PARIDADE) == registrados
 
