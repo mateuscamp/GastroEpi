@@ -99,8 +99,8 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
 
 ### Fase 0 — Esqueleto e portões (nenhuma funcionalidade)
 
-**Estado em 2026-10-31:** feita e verde localmente (Linux), com a sonda congelada
-passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #6). A sonda
+congelada passou no `windows-latest`: pasta de 25 MB, SQLCipher 4.19.0.
 
 - `pyproject.toml` com `uv`; pacotes vazios de cada fronteira; `tests/arquitetura/`
   adaptado da skill (arquivo ≤ 400, função ≤ 40, nomes grepáveis, sem ciclo).
@@ -126,9 +126,8 @@ passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
 
 ### Fase 1 — Domínio e validação (`dominio/`)
 
-**Estado em 2026-10-31:** feita e verde localmente (Linux): `uv run poe check` com 227
-testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
-Falta ver o CI em Ubuntu e Windows.
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #7): `uv run poe check`
+com 227 testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
 
 - Tipos do ADR-0004: `Paciente`, `HistoricoFamiliar`, `Exame`, `Examinador` (nome + CRM
   + UF), `Boston`, `Lesao` e as listas fechadas em `dominio/listas.py` (`VERSAO_DAS_LISTAS = 1`).
