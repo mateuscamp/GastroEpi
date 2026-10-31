@@ -101,6 +101,13 @@ def test_cabecalho_adulterado_nao_desembrulha(embrulhada: bytes) -> None:
         desembrulhar(_alterado(embrulhada, "kdf", "sal", outro_sal), SENHA)
 
 
+def test_sal_de_tamanho_errado_e_recusado(embrulhada: bytes) -> None:
+    sal_curto = base64.b64encode(bytes(8)).decode()
+
+    with pytest.raises(ArquivoDeChaveInvalido):
+        desembrulhar(_alterado(embrulhada, "kdf", "sal", sal_curto), SENHA)
+
+
 @pytest.mark.parametrize("conteudo", [b"", b"{}", b"nao e json", b'{"formato": "outro"}'])
 def test_arquivo_malformado_levanta_arquivo_invalido(conteudo: bytes) -> None:
     with pytest.raises(ArquivoDeChaveInvalido):

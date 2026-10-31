@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+import sqlcipher3
 
 from gastroepi.cofre.recovery_key import formatar_recovery_key, ler_recovery_key
 from gastroepi.dominio.cpf import formatar_cpf
@@ -119,12 +120,22 @@ def test_sqlite3_da_stdlib_nao_abre_e_o_cabecalho_nao_e_de_sqlite(tmp_path: Path
         comum.close()
 
 
+def pagina_raiz(pasta: Path, chave: bytes, tabela: str) -> int:
+    externa = sqlcipher3.connect(str(pasta / NOME_DO_BANCO))
+    externa.execute(f"PRAGMA key = \"x'{chave.hex()}'\"")
+    raiz: int = externa.execute(
+        "SELECT rootpage FROM sqlite_master WHERE name = ?", (tabela,)
+    ).fetchone()[0]
+    externa.close()
+    return raiz
+
+
 def test_um_byte_trocado_e_acusado_na_leitura_e_no_cipher_integrity_check(tmp_path: Path) -> None:
-    cofre_com_fichas(tmp_path, quantidade=40)
+    recovery_key, _ = cofre_com_fichas(tmp_path, quantidade=40)
+    raiz = pagina_raiz(tmp_path, ler_recovery_key(recovery_key), "auditoria")
     banco = tmp_path / NOME_DO_BANCO
     bruto = bytearray(banco.read_bytes())
-    meio_da_ultima_pagina = len(bruto) - 4096 // 2
-    bruto[meio_da_ultima_pagina] ^= 0x01
+    bruto[(raiz - 1) * 4096 + 4096 // 2] ^= 0x01  # meio da página: dado, não cabeçalho
     banco.write_bytes(bytes(bruto))
 
     with desbloquear(tmp_path, SENHA) as sessao:

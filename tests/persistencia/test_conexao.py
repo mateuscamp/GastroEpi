@@ -134,3 +134,34 @@ def test_transacao_desfaz_tudo_quando_algo_falha(caminho: Path, chave_de_dados: 
 
     assert conexao.execute("SELECT count(*) FROM t").fetchone()[0] == 1
     conexao.close()
+
+
+def test_erro_de_restricao_dentro_da_transacao_nao_vira_banco_corrompido(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    conexao.execute("CREATE TABLE u (v TEXT NOT NULL)")
+
+    with pytest.raises(sqlcipher3.IntegrityError), transacao(conexao):
+        conexao.execute("INSERT INTO u VALUES (NULL)")
+    conexao.close()
+
+
+def test_erro_que_ja_desfez_a_transacao_nao_e_mascarado_pelo_rollback(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    """RAISE(ROLLBACK) desfaz a transação inteira dentro do SQLite; um segundo ROLLBACK
+    levantaria 'no transaction is active' e esconderia o erro original."""
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    conexao.execute(
+        "CREATE TEMP TRIGGER desfaz BEFORE INSERT ON t"
+        " BEGIN SELECT RAISE(ROLLBACK, 'desfeito pelo gatilho'); END"
+    )
+
+    with (
+        pytest.raises(sqlcipher3.IntegrityError, match="desfeito pelo gatilho"),
+        transacao(conexao),
+    ):
+        conexao.execute("INSERT INTO t VALUES ('x')")
+    assert not conexao.in_transaction
+    conexao.close()

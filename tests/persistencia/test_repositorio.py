@@ -23,6 +23,7 @@ from gastroepi.persistencia.repositorio import (
     ProntuarioJaCadastrado,
     Repositorio,
 )
+from gastroepi.persistencia.schema import VERSAO_DO_SCHEMA, BancoMaisNovoQueOApp
 
 
 @pytest.fixture
@@ -402,12 +403,28 @@ def test_byte_trocado_numa_pagina_e_acusado_nas_paginas_e_na_leitura(
     for original in gerar_fichas(semente=13, quantidade=40):
         repositorio.cadastrar(original, usuario="teste")
     repositorio.fechar()  # o último fechamento leva o WAL para o .db
+    # A raiz da tabela é lida por qualquer consulta a ela.
+    sql = "SELECT rootpage FROM sqlite_master WHERE name = 'auditoria'"
+    (linha,) = alterar_por_fora(caminho, chave_de_dados, sql)
+    raiz = int(linha[0])  # type: ignore[index]  # a linha do sqlcipher3 é uma tupla
     bruto = bytearray(caminho.read_bytes())
-    ultima = len(bruto) // 4096
-    bruto[(ultima - 1) * 4096 + 2000] ^= 0x01
+    bruto[(raiz - 1) * 4096 + 2000] ^= 0x01
     caminho.write_bytes(bytes(bruto))
 
     with Repositorio.abrir(caminho, chave_de_dados) as corrompido:
-        assert corrompido.verificar_paginas() == (f"HMAC verification failed for page {ultima}",)
+        assert corrompido.verificar_paginas() == (f"HMAC verification failed for page {raiz}",)
         with pytest.raises(BancoCorrompido):
             corrompido.listar_auditoria()
+
+
+def test_abrir_banco_de_schema_mais_novo_recusa_e_fecha_a_conexao(
+    repositorio: Repositorio, caminho: Path, chave_de_dados: bytes
+) -> None:
+    repositorio.fechar()
+    alterar_por_fora(caminho, chave_de_dados, f"PRAGMA user_version = {VERSAO_DO_SCHEMA + 1}")
+
+    with pytest.raises(BancoMaisNovoQueOApp):
+        Repositorio.abrir(caminho, chave_de_dados)
+    # Conexão esquecida aberta manteria o -wal; fechada, o arquivo some (e no Windows
+    # a pasta temporária pode ser apagada).
+    assert not caminho.with_name(caminho.name + "-wal").exists()

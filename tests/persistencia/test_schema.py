@@ -190,3 +190,29 @@ def test_chave_da_auditoria_tem_256_bits_e_nao_e_a_chave_de_dados(
     assert isinstance(chave, bytes)
     assert len(chave) == 32
     assert chave != chave_de_dados
+
+
+def test_migracao_feita_por_outra_instancia_entre_a_checagem_e_o_begin_nao_repete(
+    tmp_path: Path, chave_de_dados: bytes
+) -> None:
+    """Duas aberturas ao mesmo tempo: a segunda relê a versão já com a trava na mão."""
+    caminho = tmp_path / "novo.db"
+    primeira, segunda = (
+        abrir_conexao(caminho, chave_de_dados),
+        abrir_conexao(caminho, chave_de_dados),
+    )
+
+    def outra_instancia_migra_antes(instrucao: str) -> None:
+        if instrucao.startswith("BEGIN IMMEDIATE"):
+            segunda.set_trace_callback(None)
+            primeira_migracao_feita.append(True)
+            migrar(primeira)
+
+    primeira_migracao_feita: list[bool] = []
+    segunda.set_trace_callback(outra_instancia_migra_antes)
+    migrar(segunda)
+
+    assert primeira_migracao_feita == [True]
+    assert segunda.execute("SELECT count(*) FROM metadados").fetchone()[0] == 1
+    primeira.close()
+    segunda.close()
