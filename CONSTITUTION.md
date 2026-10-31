@@ -25,7 +25,7 @@ Input validation happens once, in the domain layer (`dominio`, strict pydantic),
 - **Architecture:** one executable and one database; a pure core (`dominio`, `cofre`, `auditoria`, `persistencia`, `estatistica`, `exportacao`, `servicos`) and two shells (`ui_qt`, `cli`). Boundaries are enforced by import-linter in CI.
 - **Desktop shell:** PySide6 (Qt), single process, no local server.
 - **Database:** SQLite through SQLCipher 4 (`sqlcipher3`), opened only by `persistencia`, in WAL mode with busy timeouts.
-- **Legacy:** the Tauri v0.1.16 code (`src-tauri/`, TypeScript frontend) is a frozen oracle until parity, then removed (tag `v0.1.16` preserves it).
+- **Legacy:** the Tauri v0.1.16 code (`src-tauri/`, TypeScript frontend) served as a frozen oracle until parity and was removed in the cut (Phase 7); tag `v0.1.16` preserves it, and the parity fixtures in `tests/fixtures/` were generated from that tag.
 
 ---
 
@@ -35,4 +35,4 @@ No startup check. Commands and rules live in `AGENTS.md`. The former `cargo audi
 
 ---
 
-**Version**: 2.0.0 | **Ratified**: 2026-06-04 | **Amended**: 2026-10-31 (ADR-0002, ADR-0003)
+**Version**: 2.0.0 | **Ratified**: 2026-06-04 | **Amended**: 2026-10-31 (ADR-0002, ADR-0003; Tauri removed)

@@ -1,112 +1,145 @@
 # GastroEpi
 
-**GastroEpi** é um sistema desktop local e offline-first para gerenciamento clínico, endoscópico e epidemiológico de colonoscopia e rastreamento de câncer colorretal (CRC). Construído com a stack **TypeScript + React + Tailwind CSS + Rust + Tauri v2**.
+App desktop **offline** para registro de colonoscopia e epidemiologia de câncer colorretal.
+O médico cadastra pacientes e exames lesão por lesão, acompanha os indicadores de qualidade
+(taxa de detecção de adenoma, de pólipo) e roda as calculadoras de epidemiologia sobre o
+próprio banco, sem nada sair da máquina.
 
----
+Escrito em **Python 3.13** com **PySide6 (Qt)**, **SQLCipher 4**, **pydantic estrito** e
+**numpy/scipy**. A v0.1.16 era um app Tauri (Rust + React); a reescrita está descrita no
+[ADR-0002](docs/adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md) e no
+[plano de fases](docs/PLANO-REESCRITA-PYTHON.md). O código antigo está na tag `v0.1.16`.
 
-## Download (Executáveis Prontos)
+> Todo dado do repositório, dos testes e do modo demo vem de um gerador de pacientes
+> fictícios com semente. Nenhum dado real.
 
-Os instaladores prontos podem ser baixados no link abaixo:
+## O que ele faz
 
-### [👉 Clique aqui para baixar a versão mais recente](https://github.com/mateuscamp/GastroEpi/releases/latest)
+- **Cadastro clínico estruturado:** paciente, histórico familiar, exame e cada lesão em
+  listas fechadas (ADR-0004). Texto livre (`observacao`, `laudo_texto`) nunca entra em cálculo.
+- **Indicadores de qualidade** por examinador, prevalência de pólipo, frequências e
+  estratificação do próprio banco.
+- **Calculadoras:** tabela 2×2 (OR, RR, qui-quadrado de Pearson e Yates, exato de Fisher),
+  teste diagnóstico com intervalos de Wilson, tamanho de amostra (inquérito e comparativo de
+  Fleiss), tendência de Cochran-Armitage, Mantel-Haenszel e qui-quadrado R×C.
+- **Integridade verificável:** cada mutação grava um elo de auditoria na mesma transação;
+  a verificação acusa a primeira entrada adulterada.
+- **Durabilidade:** checagem na abertura, backup conferido antes de ganhar o nome, rotação
+  por data, cópia externa e recusa de pasta sincronizada (ADR-0005).
+- **Exportação:** CSV pt-BR anônimo para análise, com proteção contra injeção de fórmula.
 
-No link acima, acesse a seção **Assets** e baixe o instalador do seu sistema operacional:
-*   **🪟 Windows:** Baixe o instalador executável `.exe` (ex: `GastroEpi_0.1.15_x64-setup.exe`) ou o pacote `.msi`.
-*   **🍎 macOS (Apple Silicon):** Baixe o arquivo `.dmg` (ex: `GastroEpi_0.1.15_aarch64.dmg`).
-*   **🐧 Linux:** Baixe o pacote `.deb` (Ubuntu/Debian), `.AppImage` ou `.rpm`.
+## Arquitetura
 
-> [!TIP]
-> **Nota de Instalação (macOS/Windows):** 
-> * No **macOS**, se vir um aviso de "desenvolvedor não identificado", clique com o **botão direito** sobre o ícone do aplicativo e escolha **Abrir** para autorizar o sistema. Caso esta opção não esteja disponível, digite no terminal:
->   `xattr -cr /Applications/GastroEpi.app`
-> * No **Windows**, se o SmartScreen aparecer, clique em **Mais informações** e em seguida em **Executar assim mesmo**.
+Monólito modular: **1 executável, 1 banco**. Um núcleo puro e duas cascas finas.
 
----
-
-## Funcionalidades Principais
-
-*   **Segurança Extrema (LGPD):** 100% offline. Criptografia em repouso de dados pessoais sensíveis (CPF) e laudos de biópsia usando AES-256-GCM com chaves derivadas de senha mestre via KDF Argon2id.
-*   **Cadeia de Auditoria Verificável (Hash-Chain):** Registros de todas as operações (criar, editar, excluir) gravados em tabela SQLite append-only protegida por triggers e encadeados por hashes SHA-256. Detecção imediata de adulterações externas.
-*   **StatCalc Engine (Epi Info Rust):**
-    *   Tabela de contingência 2x2 com Odds Ratio, Risco Relativo, Qui-Quadrado (Pearson, Yates) e Teste Exato de Fisher.
-    *   Acurácia diagnóstica (Sensibilidade, Especificidade, VPP, VPN, Razão de Verossimilhança) com intervalos de confiança de Wilson de 95%.
-    *   Cálculo de tamanho amostral (survey com correção de população finita e coorte comparativa via fórmula de Fleiss).
-    *   Teste de Tendência Linear Cochran-Armitage.
-    *   Acompanhamento de Indicadores de Qualidade (ADR e PDR) por endoscopista com avisos visuais.
-*   **Exportação Segura:** Geração de relatórios CSV formatados para Excel (pt-BR) com proteção integrada contra CSV Injection.
-
-
----
-
-## Instalação e Configuração
-
-Para obter o código fonte e instalar as dependências do projeto localmente:
-
-### 1. Clonar o repositório
-Escolha o protocolo de sua preferência (SSH ou HTTPS):
-
-```bash
-# Via SSH (Recomendado)
-git clone git@github.com:mateuscamp/GastroEpi.git
-cd GastroEpi
-
-# Ou via HTTPS
-git clone https://github.com/mateuscamp/GastroEpi.git
-cd GastroEpi
+```
+         ui_qt (PySide6)        cli (demo · verificar · backup · exportar)
+                 \                 /
+                  └──── servicos ──┘        casos de uso: a única porta das cascas
+                         │
+   dominio · cofre · auditoria · persistencia · estatistica · exportacao
 ```
 
-### 2. Instalar dependências de frontend
+| Módulo | Papel |
+|---|---|
+| `dominio` | Paciente, exame, lesão, CPF, datas, validação (pydantic estrito). Não faz I/O nem importa outro módulo. |
+| `cofre` | Argon2id (t=3, m=64 MiB, p=4), chave de dados embrulhada, recovery key. |
+| `auditoria` | Calcula e confere a cadeia HMAC-SHA256. Pura: quem grava é a persistência. |
+| `persistencia` | SQLCipher: schema, migrações idempotentes, repositório, backup conferido, rotação, trava. |
+| `estatistica` | Contingência, Wilson, Fleiss, Cochran-Armitage, Mantel-Haenszel, qualidade, descritiva. |
+| `exportacao` | CSV pt-BR com proteção contra injeção. |
+| `servicos` | Casos de uso; a casca não vê banco, cofre nem SQL. |
+
+As fronteiras não são convenção: o **import-linter** as quebra no CI. O núcleo nunca importa
+Qt; as cascas só importam `servicos` e os tipos de `dominio`; só `persistencia` importa o
+`sqlcipher3`; nenhum módulo importa `socket`, `http` ou `urllib`, e a suíte roda com
+`pytest --disable-socket`. As regras completas estão no [`AGENTS.md`](AGENTS.md) e os
+princípios na [`CONSTITUTION.md`](CONSTITUTION.md).
+
+### Segurança do dado
+
+- **O arquivo inteiro é cifrado** com SQLCipher 4: campos, catálogos, auditoria, WAL e
+  backups ([ADR-0003](docs/adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md)). O `sqlite3`
+  da stdlib não abre o banco, e um byte trocado é acusado pelo HMAC de página.
+- A chave do banco é aleatória (256 bits), **nunca derivada da senha**. Em disco ela só
+  existe embrulhada (AES-256-GCM) por uma chave Argon2id da senha. A recovery key aparece uma
+  vez e nunca é gravada.
+- **Auditoria append-only:** triggers do banco bloqueiam `UPDATE` e `DELETE` na tabela de
+  auditoria, e os elos formam uma cadeia HMAC-SHA256 com chave própria, que sobrevive à
+  rotação da chave de dados. Um teste de estado do hypothesis faz mutações aleatórias e
+  confere cadeia e dados no fim.
+
+### Estatística com referência
+
+Toda função pública de `estatistica` tem teste marcado `@pytest.mark.referencia`, com o valor
+de referência citado na docstring (Princípio IV). Os valores vêm do **R 4.5.1** (`epitools`,
+`DescTools`), gerados por [`ferramentas/referencias_r/gerar.R`](ferramentas/referencias_r/gerar.R);
+o CI reroda o script e falha se a saída divergir do fixture versionado. A paridade com a
+v0.1.16 está congelada em `tests/fixtures/`, com as divergências de propósito documentadas
+no plano (ex.: p < 1e-16, que a v0.1.16 arredondava para 0).
+
+## Como rodar
+
+Requer [uv](https://docs.astral.sh/uv/). O Python certo vem da `.python-version`.
+
 ```bash
-npm install
+uv sync
 ```
 
----
-
-## Requisitos de Ambiente
-
-*   **Node.js** (versão 18+) e **npm**
-*   **Rust** (cargo e compilador `rustc` versão 1.75+)
-*   Bibliotecas do sistema necessárias para compilação do Tauri (como `webkit2gtk-4.1` ou `webkit2gtk-4.0` no Linux, dependendo da distribuição).
-
----
-
-## Comandos Úteis
-
-### 1. Ambiente de Desenvolvimento
-Para rodar o aplicativo localmente com hot-reload no frontend e recompilação automática do backend Rust:
 ```bash
-npm run tauri dev
+uv run gastroepi demo
 ```
 
-### 2. Compilar Executável de Produção
-Para compilar a versão final otimizada do executável desktop:
-```bash
-npm run tauri build
-```
-O executável compilado de produção estará localizado em:
-*   **Linux:** `src-tauri/target/release/tauri-app` ou pacotes `.deb`/`.rpm` na pasta `src-tauri/target/release/bundle/`.
+O modo demo cria um cofre de pacientes fictícios numa pasta temporária, já desbloqueado; a
+senha aparece no terminal. `uv run gastroepi` abre o cofre de verdade (no Windows, em
+`%LOCALAPPDATA%\GastroEpi`). Os outros comandos: `verificar`, `backup` e `exportar`.
 
-### 3. Rodar Testes Unitários e de Propriedade
-Os testes estatísticos e de criptografia estão implementados em Rust. Para rodá-los:
 ```bash
-cd src-tauri
-cargo test
+uv run poe check
 ```
 
-### 4. Build do Frontend
-Para buildar estaticamente apenas os arquivos do frontend React + TypeScript:
+A checagem completa: `ruff format` e `ruff check`, `mypy --strict`, os contratos do
+import-linter e o pytest com cobertura ≥ 90% (100% dos ramos no `dominio`). A suíte roda em
+menos de 60 s, headless (`QT_QPA_PLATFORM=offscreen`), sem rede e sem senha real. Os testes da
+casca usam `pytest-qt` contra serviços reais em `tmp_path`, e o banco é sempre SQLite real,
+nunca mock.
+
+## Instalador Windows
+
+Gerado no CI a cada PR e a cada tag `v*`
+([ADR-0006](docs/adr/0006-empacotar-com-pyinstaller-onedir-e-inno-setup.md)): PyInstaller
+*onedir* em modo janela e instalador Inno Setup **por usuário**, sem pedir administrador. O
+CI instala em silêncio no `windows-latest` e roda o `GastroEpi.exe --smoke` instalado, um
+autoteste que cria, fecha e reabre um cofre cifrado. É o portão do PR, com os tetos do ADR-0002:
+
+| Medido no CI (Fase 6) | Valor | Limite |
+|---|---|---|
+| Instalador | 62,5 MB | 250 MB |
+| `--smoke` do instalado | 6,2 s | 8 s |
+
+O instalador não é assinado: o SmartScreen pede **Mais informações → Executar assim mesmo**.
+O roteiro de aceitação manual está em [`docs/ROTEIRO-WINDOWS.md`](docs/ROTEIRO-WINDOWS.md).
+
+Para congelar localmente:
+
 ```bash
-npm run build
+uv run --group empacotamento pyinstaller --noconfirm empacotamento/gastroepi.spec
 ```
 
----
+## Decisões (ADRs)
 
-## Estrutura de Diretórios Importante
+| ADR | Decisão |
+|---|---|
+| [0001](docs/adr/0001-monolito-modular-com-nucleo-sem-tauri.md) | Núcleo Rust sem Tauri (substituído pelo 0002) |
+| [0002](docs/adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md) | Reescrever em Python: um executável, núcleo puro e casca Qt |
+| [0003](docs/adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md) | Cifrar o banco inteiro com SQLCipher, chave de dados separada da senha |
+| [0004](docs/adr/0004-registrar-o-exame-em-dados-estruturados.md) | Exame em dados estruturados: lesão por lesão, qualidade e listas fechadas |
+| [0005](docs/adr/0005-durabilidade-do-cofre.md) | Durabilidade: checagem na abertura, backup conferido, rotação e cópia externa |
+| [0006](docs/adr/0006-empacotar-com-pyinstaller-onedir-e-inno-setup.md) | PyInstaller onedir e Inno Setup por usuário |
 
-*   `src/`: Contém a interface em React e TypeScript.
-    *   [App.tsx](file:///home/mateus/GastroEpi/src/App.tsx): Dashboard de controle principal (LockScreen, Cadastro Clínico, StatCalc e Auditoria).
-    *   [validation.ts](file:///home/mateus/GastroEpi/src/validation.ts): Esquemas de validação do Zod (CPF brasileiro, datas e pre-processamento).
-*   `src-tauri/`: Contém a infraestrutura nativa e segurança em Rust.
-    *   [src/crypto.rs](file:///home/mateus/GastroEpi/src-tauri/src/crypto.rs): Algoritmos de encriptação, KDF e canary de segurança.
-    *   [src/db.rs](file:///home/mateus/GastroEpi/src-tauri/src/db.rs): Driver SQLite, migrations, triggers de auditoria e rotinas de integridade.
-    *   [src/math/](file:///home/mateus/GastroEpi/src-tauri/src/math/): Engine estatística e analítica pura.
+Cada ADR termina numa tabela de Governança: a checagem executável que o CI roda para que a
+decisão não se perca.
+
+## Licença
+
+[GPL-3.0](LICENSE).

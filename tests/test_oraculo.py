@@ -1,7 +1,8 @@
 """Os fixtures do oráculo v0.1.16 existem e são legíveis (ADR-0002, Fase 0).
 
-São a referência dos testes de paridade das Fases 1 e 3. Regerar só a partir do
-código congelado: ferramentas/oraculo_rust (math/) e src/validation.ts (Node).
+São a referência dos testes de paridade das Fases 1 e 3. O código que os gerou saiu no
+corte (Fase 7); a fonte de cada um é a tag `v0.1.16` (`ferramentas/oraculo_rust/` para
+math/, `src/validation.ts` no Node). Regerar só a partir de um checkout dessa tag.
 """
 
 import json
