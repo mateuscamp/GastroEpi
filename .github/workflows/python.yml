@@ -1,0 +1,198 @@
+# Portões da reescrita em Python (ADR-0002, ADR-0003).
+# Cada job corresponde a uma linha de Governança de um ADR; ao remover um, atualizar o ADR.
+
+name: python
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checagem:
+    name: checagem completa (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Instalar (Python da .python-version, versões do uv.lock)
+        run: uv sync --locked
+      # O Qt (Fase 5) carrega libEGL e afins mesmo em offscreen; o runner Ubuntu não as traz.
+      - name: Bibliotecas de sistema do Qt (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      # ruff, mypy --strict, import-linter, pytest sem rede com cobertura ≥ 90%.
+      # Os testes da casca (Fase 5) salvam a captura de cada tela em GASTROEPI_CAPTURAS.
+      - name: Checagem completa
+        run: uv run poe check
+        env:
+          GASTROEPI_CAPTURAS: capturas
+      - name: Capturas das telas (revisão visual)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-${{ matrix.os }}
+          path: capturas/
+          if-no-files-found: error
+
+  sonda-sqlcipher:
+    name: sonda do SQLCipher congelado (windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Instalar
+        run: uv sync --locked
+      # ADR-0003: se isto falhar, o plano B é apsw-sqlite3mc, antes da Fase 2.
+      - name: Congelar a sonda
+        run: uv run --with pyinstaller pyinstaller --noconfirm --onedir --name sonda_sqlcipher ferramentas/sonda_sqlcipher.py
+      - name: Rodar o executável congelado
+        run: ./dist/sonda_sqlcipher/sonda_sqlcipher.exe
+      - name: Tamanho da pasta congelada
+        run: du -sh dist/sonda_sqlcipher
+
+  instalador:
+    name: instalador e --smoke (windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      # Limites do ADR-0002, verificados como manda o ADR-0006.
+      LIMITE_MB: 250
+      LIMITE_S: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Instalar (com o PyInstaller do grupo empacotamento)
+        run: uv sync --locked --group empacotamento
+      - name: Congelar (PyInstaller onedir, modo janela)
+        run: uv run --group empacotamento pyinstaller --noconfirm empacotamento/gastroepi.spec
+      - name: Gerar o instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y --no-progress }
+          $versao = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { uv version --short }
+          iscc "/DVersao=$versao" empacotamento\gastroepi.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Instalar em silêncio, como o usuário
+        shell: pwsh
+        run: |
+          $instalador = (Get-ChildItem dist\GastroEpi-*-instalador.exe).FullName
+          $p = Start-Process $instalador -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "instalador saiu com $($p.ExitCode)"; exit 1 }
+      # ADR-0006: o --smoke do executável INSTALADO é o portão; o tempo dele aproxima a abertura.
+      - name: --smoke do instalado, tamanho e abertura contra o ADR-0002
+        shell: pwsh
+        run: |
+          $exe = "$env:LOCALAPPDATA\Programs\GastroEpi\GastroEpi.exe"
+          $tempo = Measure-Command {
+            $script:p = Start-Process $exe -ArgumentList '--smoke' -Wait -PassThru `
+              -RedirectStandardOutput smoke.txt -RedirectStandardError smoke-erro.txt
+          }
+          Get-Content smoke.txt, smoke-erro.txt
+          $mb = (Get-ChildItem dist\GastroEpi-*-instalador.exe).Length / 1MB
+          $pasta = (Get-ChildItem dist\GastroEpi -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+          $linha = "instalador {0:N1} MB (limite $env:LIMITE_MB) · pasta {1:N0} MB · --smoke {2:N1} s (limite $env:LIMITE_S)" -f $mb, $pasta, $tempo.TotalSeconds
+          $linha | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          if ($p.ExitCode -ne 0) { Write-Error "--smoke saiu com $($p.ExitCode)"; exit 1 }
+          if ($mb -gt [double]$env:LIMITE_MB) { Write-Error "instalador acima do teto do ADR-0002"; exit 1 }
+          if ($tempo.TotalSeconds -gt [double]$env:LIMITE_S) { Write-Error "abertura acima do teto do ADR-0002"; exit 1 }
+      # Em todo PR, para o roteiro manual; em tag v*, é o instalador da entrega.
+      - name: Guardar o instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          path: dist/GastroEpi-*-instalador.exe
+          retention-days: ${{ github.ref_type == 'tag' && 90 || 14 }}
+          if-no-files-found: error
+
+  referencias-r:
+    name: referências do R (estatística)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # Princípio IV: os valores de referência da estatística vêm do R, com versão fixa.
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+          use-public-rspm: true
+      - name: Instalar os pacotes de referência
+        run: Rscript -e 'install.packages(c("jsonlite", "epitools", "DescTools"))'
+      - name: Gerar as referências
+        run: Rscript ferramentas/referencias_r/gerar.R referencias_r.json tests/fixtures/oraculo_rust_v0_1_16.json5
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: referencias_r
+          path: referencias_r.json
+      # Mudou o R, um pacote ou o script: o fixture versionado tem que acompanhar.
+      - name: Comparar com tests/fixtures/referencias_r.json
+        run: diff -u tests/fixtures/referencias_r.json referencias_r.json
+
+  sonda-estatistica:
+    name: peso da estatística congelada (windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Instalar
+        run: uv sync --locked
+      # ADR-0002: o instalador inteiro tem teto de 250 MB; isto mede a parte de numpy/scipy.
+      - name: Congelar a sonda (Fase 3, numpy + scipy)
+        run: uv run --with pyinstaller pyinstaller --noconfirm --onedir --name sonda_estatistica ferramentas/sonda_estatistica.py
+      - name: Rodar o executável congelado
+        run: ./dist/sonda_estatistica/sonda_estatistica.exe
+      # Projeção da Fase 3b: statsmodels (e pandas) entram com a regressão logística.
+      - name: Congelar a sonda com statsmodels (projeção da Fase 3b)
+        run: >-
+          uv run --with pyinstaller --with statsmodels pyinstaller --noconfirm --onedir
+          --name sonda_estatistica_3b --hidden-import statsmodels.api ferramentas/sonda_estatistica.py
+      - name: Rodar o executável congelado da projeção
+        run: ./dist/sonda_estatistica_3b/sonda_estatistica_3b.exe --3b
+      - name: Tamanho das pastas e do zip (aproxima o instalador)
+        run: |
+          for pasta in sonda_estatistica sonda_estatistica_3b; do
+            7z a -tzip -mx=9 "dist/$pasta.zip" "./dist/$pasta" > /dev/null
+            echo "$pasta: pasta $(du -sh "dist/$pasta" | cut -f1), zip $(du -h "dist/$pasta.zip" | cut -f1)"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+
+  dependencias:
+    name: vulnerabilidades nas dependências
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Substitui o cargo audit: dependência com vulnerabilidade conhecida não entra na main.
+      - name: pip-audit sobre o uv.lock
+        run: |
+          uv export --locked --no-emit-project --no-hashes --format requirements-txt > requisitos.txt
+          uvx pip-audit --strict -r requisitos.txt

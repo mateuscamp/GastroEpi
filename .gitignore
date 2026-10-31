@@ -1,0 +1,46 @@
+# Saída do PyInstaller e segredos locais
+dist/
+*.local
+.env
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.sw?
+
+# Local Database and Backup Files (LGPD & Security Compliance)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/
+reports/
+
+# AI Coding Assistant Metadata
+.claude/
+.gemini/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+build/
+*.spec
+!empacotamento/gastroepi.spec
+
+# Cofre do GastroEpi (ADR-0003): o arquivo de chave nunca vai para o repositório
+*.chave
+capturas/

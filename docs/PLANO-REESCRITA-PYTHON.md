@@ -1,0 +1,512 @@
+# GastroEpi — decisão 0002: como reescrever o app inteiro em Python
+
+**Status:** Aceito · **Data:** 2026-10-31 · ADRs: [0002](adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md),
+[0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md), [0004](adr/0004-registrar-o-exame-em-dados-estruturados.md),
+[0005](adr/0005-durabilidade-do-cofre.md)
+
+Origem das ideias de durabilidade, relatório e exportação: a conversa de 2026-10-24
+(sessão `claude.ai/code/session_01EzZwqyjZDjVB2241MnSp7N`), registrada em
+`docs/PLANO-REESTRUTURACAO.md` na branch `docs/adr-0001-arquitetura`.
+
+**Bottom line**: reescrever como **um executável Python** com **núcleo puro** (domínio,
+cofre, auditoria, persistência, estatística, exportação, serviços) e **casca desktop
+PySide6** + CLI, com fronteiras verificadas no CI. O app não abre nenhuma porta e o
+cofre nunca fica alcançável por outro processo. A decisão se inverte se o instalador
+passar de 250 MB ou a abertura a frio passar de 8 s no Windows de teste; nesse caso,
+troca-se só a casca.
+
+## Drivers
+
+| ★ | Característica | Origem (frase do problema) | Como se mede |
+|---|---|---|---|
+| ★ | Integridade e confidencialidade do dado clínico | CONSTITUTION I–III; "não corromper os dados" (prioridade nº 1); o usuário leigo vai digitar pacientes reais depois da entrega | (1) hypothesis com sequências aleatórias de mutação → 0 inconsistências na cadeia e nos dados; (2) 1 linha adulterada por fora → acusa a 1ª entrada afetada; (3) 0 ocorrências de nome/CPF/prontuário/laudo conhecidos nos bytes do `.db` e dos backups (ADR-0003) |
+| | Implantabilidade e operação sem suporte | "usuário leigo no Windows"; "algo que eu pudesse largar na mão dele" sem ser chamado (conversa de 2026-10-24) | Instalador gerado no CI (`windows-latest`) a cada tag; `GastroEpi.exe --smoke` sai com 0; funciona sem Python instalado; ≤ 250 MB; abertura a frio ≤ 8 s (Tauri hoje: 2 MB, < 1 s) |
+| | Fidelidade estatística | Princípio IV; os testes Rust atuais só checam sinal (`p_valor > 0.0`) | 100% das funções públicas de `estatistica/` com teste de valor de referência citado (R/Epi Info, tolerância 1e-6) e paridade com o oráculo v0.1.16 |
+| | Soberania local | Princípio I | Suíte inteira com `--disable-socket`; 0 imports de rede no pacote |
+| | Testabilidade headless | ADR-0001: "testes presos ao WebKit; o CI só compila" | `uv run pytest` sem display em ≤ 60 s, em Ubuntu e Windows; cobertura de ramos ≥ 90% no núcleo |
+| | Legibilidade para agente | `App.tsx` com 2.787 linhas, `db.rs` com 1.966 | 0 arquivos > 400 linhas; 0 funções > 40; `mypy --strict` com 0 erros; contratos do import-linter verdes |
+| | Demonstrabilidade (portfólio) | "criar um portfólio Python": dados/saúde, backend, engenharia, desktop | Clone limpo → `uv sync && uv run gastroepi demo` abre com pacientes fictícios; README com arquitetura e ADRs; CI verde visível |
+
+## Quantum
+
+- **Hoje:** 1. É o executável Tauri (webview React + núcleo Rust), dono de `gastroepi.db` e `backups/`.
+- **Alvo:** 1. Um executável Python congelado, dono do mesmo tipo de arquivo. Não há
+  driver de modularidade com evidência para distribuir (1 usuário, 1 máquina, ~10 mil
+  registros), então a conversa é sobre módulos dentro do monólito.
+
+## Dimensões emaranhadas
+
+- **Linguagem × empacotamento**: Python no Windows de um leigo exige executável
+  congelado. Cada dependência nativa (Qt, scipy) entra no instalador e no tempo de abertura.
+- **Casca × superfície de rede**: uma casca web exige servidor em 127.0.0.1 enquanto
+  o cofre está aberto. A casca Qt não abre porta.
+- **Formato em disco × confidencialidade × consulta**: o que fica cifrado decide se o
+  SQL consegue filtrar e indexar. Hoje idade, sexo, prontuário e data ficam legíveis
+  no arquivo. O ADR-0003 resolve com SQLCipher: o arquivo inteiro cifrado e o SQL
+  funcionando sobre todos os campos.
+- **Persistência × auditoria**: se o evento de auditoria for gravado fora da transação
+  da mutação, um crash deixa estado e cadeia divergentes.
+- **Estatística × persistência**: no Rust, `math` importa `db::Paciente`. Toda mudança
+  de schema quebra cálculo.
+- **Validação × casca**: hoje a regra mora no Zod e não no Rust. Com uma linguagem só,
+  a duplicação some, desde que a casca seja proibida de validar.
+- **Senha × chave dos dados**: hoje a recovery key é a própria chave derivada da senha.
+  Trocar a senha obriga a recifrar tudo. O ADR-0003 resolve com uma chave de dados
+  aleatória, embrulhada pela senha.
+
+## Opções
+
+| Opção | Ganha | Perde | Driver afetado | Viável? |
+|---|---|---|---|---|
+| Tradução arquivo por arquivo | Velocidade inicial | Arquivos gigantes e `estatística → banco` | Legibilidade, testabilidade | Não |
+| Núcleo + casca web local (NiceGUI) | UI moderna, vitrine web | Porta aberta com cofre aberto; repete a saída do NiceGUI | ★, soberania | Sim, com token; não escolhida |
+| Núcleo + FastAPI + HTMX | Vitrine backend | Duas interfaces, porta aberta, mais código | ★, legibilidade | Sim; não escolhida |
+| Serviço local + cliente | Isolamento | Rede contra o Princípio I | Soberania | Não |
+| Manter Tauri | 2 MB, < 1 s | Não é portfólio Python | Demonstrabilidade | Não (objetivo mudou) |
+| **Núcleo + PySide6 + CLI** | Sem porta; UI testável headless | Instalador ~50x maior; UI verbosa | Implantabilidade (custo) | **Escolhida** |
+
+## Trade-off da escolhida
+
+- **Escala:** são ~10 mil pacientes fictícios, 1 usuário e 1 máquina. O desempenho do
+  Python não pesa: o SQLCipher decifra por página dentro do C, e a listagem dos 10 mil
+  pacientes vai ser medida na Fase 2.
+- **Custo real:** o instalador vai de 2 MB para algo entre 80 e 150 MB, e a abertura,
+  de < 1 s para 2–5 s, num usuário que abre o app algumas vezes por dia.
+- **Ganho:** a vitrine vem do núcleo (estatística validada, cofre, cadeia de auditoria),
+  não da casca. Para chegar lá, reescrevem-se ~7.900 linhas (≈4.000 de UI, ≈3.900 de
+  Rust), numa ordem que entrega o núcleo testado antes da primeira tela.
+
+## Pilha (nível de design: barato de trocar, sem ADR próprio)
+
+- Python 3.13 via `uv` (o sistema tem 3.14; a 3.13 tem wheels estáveis de PySide6,
+  scipy e statsmodels).
+- Projeto: `pyproject.toml`, `uv.lock`, layout `src/`.
+- Qualidade: `ruff` (lint + formatação), `mypy --strict` com plugin do pydantic,
+  `import-linter`, `pip-audit` (substitui o `cargo audit`).
+- Testes: `pytest`, `hypothesis` (herdeiro do `proptest`), `pytest-qt` com
+  `QT_QPA_PLATFORM=offscreen`, `pytest-socket`, `coverage`.
+- Núcleo: `pydantic` v2, `sqlcipher3` (SQLCipher 4, ADR-0003), `cryptography`
+  (embrulho da chave em AES-256-GCM, HMAC), `argon2-cffi` (Argon2id),
+  `numpy`/`scipy`/`statsmodels`/`pandas` em `estatistica/`.
+- Casca: `PySide6-Essentials`.
+
+Durante a transição, o pacote Python mora em `src/gastroepi/`, ao lado dos arquivos
+TS congelados em `src/*.tsx`. No corte, `src/` fica só com `gastroepi/`.
+
+## Fases
+
+Toda fase começa pelo teste vermelho citado, visto falhando **na asserção**, e só
+termina com a checagem completa verde no CI em Ubuntu e Windows.
+
+### Fase 0 — Esqueleto e portões (nenhuma funcionalidade)
+
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #6). A sonda
+congelada passou no `windows-latest`: pasta de 25 MB, SQLCipher 4.19.0.
+
+- `pyproject.toml` com `uv`; pacotes vazios de cada fronteira; `tests/arquitetura/`
+  adaptado da skill (arquivo ≤ 400, função ≤ 40, nomes grepáveis, sem ciclo).
+- Contratos do import-linter da tabela de Governança do ADR-0002.
+- `pytest --disable-socket` por padrão; `.github/workflows/python.yml` com Ubuntu e Windows.
+- O `build.yml` do Tauri fica como está até o corte.
+- **Oráculo:** `ferramentas/oraculo_rust/` é um crate à parte que inclui os arquivos de
+  `src-tauri/src/math/` por `#[path]`, sem compilar o Tauri. Ele grava em
+  `tests/fixtures/oraculo_rust_v0_1_16.json5` as saídas de cada função numa grade de
+  entradas, inclusive as bordas (zeros, n = 0, células vazias). Os vetores de CPF e
+  data (`vetores_validacao_v0_1_16.json`) saem do próprio `src/validation.ts`, rodado no Node.
+- **Spike do SQLCipher (ADR-0003):** job `windows-latest` com Python 3.13 instala o
+  `sqlcipher3`, congela um script que cria, fecha e reabre um banco cifrado, e roda o
+  executável. Se falhar, o ADR-0003 vai para o plano B (`apsw-sqlite3mc`) antes da Fase 2.
+- Emendar a CONSTITUTION para v2.0.0:
+  - restrições técnicas passam a ser Python/Qt (ADR-0002, aceito);
+  - Princípio II passa a exigir o arquivo inteiro cifrado (ADR-0003);
+  - Princípio V troca Zod por pydantic no `dominio`;
+  - o protocolo de início de sessão (`cargo audit`) sai.
+- **Primeiro vermelho:** o contrato "núcleo não conhece interface" falha com um
+  `import PySide6` plantado em `dominio/`. Depois a violação é removida.
+- **Sai quando:** CI verde nos dois sistemas e oráculo versionado.
+
+### Fase 1 — Domínio e validação (`dominio/`)
+
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #7): `uv run poe check`
+com 227 testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
+
+- Tipos do ADR-0004: `Paciente`, `HistoricoFamiliar`, `Exame`, `Examinador` (nome + CRM
+  + UF), `Boston`, `Lesao` e as listas fechadas em `dominio/listas.py` (`VERSAO_DAS_LISTAS = 1`).
+  CPF e prontuário são tipos de campo (`campos.py`), não classes.
+- Derivados como propriedades, nunca campos: `n_polipos`, grau do parentesco, idade no
+  exame, adenoma convencional, adenoma avançado (USMSTF 2020), serrilhada, preparo
+  adequado (Boston, Calderwood 2014) e "aguardando histologia".
+- `problemas_de` traduz o `ValidationError` para (campo, código, mensagem pt-BR). O
+  `repr` e as mensagens nunca mostram nome, CPF, prontuário, nascimento ou texto livre.
+- Escolhas do dono no AskUserQuestion (registradas no ADR-0004, Notas): 12 parentescos
+  com grau da genética médica; 6 motivos de não intubação + outro; "aguardando" separado
+  de "sem histologia" e displasia coerente com a histologia; só a intubação cecal é
+  obrigatória entre os campos de qualidade.
+- Divergências da v0.1.16, de propósito: CPF com letra é recusado (a v0.1.16 apagava a
+  letra); data fora do ISO é recusada em vez de virar vazio; o eco `formatado`/`iso` das
+  entradas inválidas não é reproduzido, porque a entrada inválida é recusada.
+- Achado: "um dígito trocado falha" não vale para todo CPF. Em 0,18% das trocas o resto
+  passa de 0 para 1 (ou o inverso) e o DV continua 0 (ex.: `704.999.622-06` e
+  `804.999.622-06`). A propriedade do hypothesis exclui essa dobra, e um teste a documenta.
+
+Plano original da fase:
+
+- `Paciente`, `HistoricoFamiliar`, `Cpf`, `Prontuario`, datas `dd/mm/aaaa` ↔ ISO,
+  `Sexo` e indicação. Pydantic estrito: rejeita `True` em campo inteiro (Princípio V),
+  converte vazio ou espaço em `None`, normaliza o CPF para 11 dígitos com DV e recusa
+  dígitos repetidos.
+- Gerador de pacientes fictícios com semente (usado pela `demo` e pelos testes).
+- **Primeiro vermelho:** Cenário 2, `111.111.111-11` recusado com mensagem pt-BR.
+- **Sai quando:** todos os vetores do `validation.ts` passam; propriedades do
+  hypothesis (CPF válido gerado passa; um dígito trocado falha); cobertura de ramos de 100%.
+
+### Fase 2 — Cofre, persistência e auditoria
+
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #8): `uv run poe check`
+com 415 testes em ~5 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, o Cenário 3, visto na asserção: `assert () == (Divergencia(...),)`.
+- `tests/arquitetura/test_adr_0003.py` tem um teste por linha da Governança do ADR-0003.
+  `tests/arquitetura/test_mutacoes_auditadas.py` é o teste de estado do hypothesis
+  (Governança do ADR-0002). O Cenário 1 está em `tests/servicos/test_acesso.py`.
+- A verificação tem três camadas: páginas (`cipher_integrity_check`), cadeia e dados.
+  A dos dados aponta, por registro, o motivo e a entrada contrariada:
+  - alterado, sem evento, ausente e excluído presente;
+  - histórico interrompido: o "antes" de uma entrada não é o "depois" da anterior.
+    Assim, editar pelo app depois de uma alteração por fora não apaga o rastro.
+- Achados:
+  - Sem `foreign_keys = ON`, editar uma ficha deixava lesões órfãs.
+  - Logo após o `PRAGMA rekey` em WAL, o `.db` ainda tem páginas da chave antiga, e o
+    `cipher_integrity_check` as acusa. O rekey agora faz `wal_checkpoint(TRUNCATE)`.
+  - Com chave errada, o SQLCipher 4.19 escreve `ERROR CORE … hmac check failed` no
+    stderr. Toda conexão roda `PRAGMA cipher_log_level = NONE` logo após o `PRAGMA key`,
+    e um teste confere o stderr vazio.
+- Decisões de implementação: Notas do ADR-0003.
+
+Medição (`uv run python ferramentas/medir_listagem.py 10000 .`), Linux, NVMe:
+
+| 10 mil pacientes fictícios (12.941 exames, 14.925 lesões) | Tempo |
+|---|---|
+| Listar as fichas completas (o que a tabela da Fase 5 e a estatística leem) | 0,35 s |
+| Buscar 1 ficha | < 1 ms |
+| Verificar páginas, cadeia e dados | 0,52 s |
+| Cadastrar, um por transação com o evento de auditoria | 1,7 ms cada (16,7 s no total) |
+| Tamanho do `gastroepi.db` | 16,2 MiB |
+
+Num tmpfs o cadastro cai para 0,2 ms: o custo é o fsync de cada transação. Listar e
+verificar não mudam.
+
+Plano original da fase:
+
+- **Cofre ([ADR-0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md)):** banco
+  SQLCipher 4 aberto com uma chave de dados aleatória.
+  - O `gastroepi.chave` guarda essa chave embrulhada pela senha (Argon2id t=3, m=64 MiB, p=4).
+  - A recovery key é a própria chave, em base32 com dígito de verificação.
+  - Trocar a senha só re-embrulha a chave.
+  - "Gerar nova recovery key" faz `PRAGMA rekey`.
+  - A chave HMAC da auditoria é separada e fica dentro do banco.
+- `auditoria/` é pura: calcula o elo HMAC-SHA256 e verifica a sequência. Começa limpa,
+  só com `v2`, sem o caminho legado SHA-256.
+- `persistencia/` cuida do schema, das triggers append-only, das migrações idempotentes
+  e do repositório. Cada mutação e seu evento entram no mesmo `BEGIN IMMEDIATE`.
+- **Primeiro vermelho:** Cenário 3. Uma linha alterada por `sqlite3` externo é acusada
+  com o id e o timestamp da entrada.
+- **Sai quando:** passam o teste de estado do hypothesis, toda a tabela de Governança
+  do ADR-0003 (bytes, cabeçalho, adulteração, recovery sem arquivo de chave, troca de
+  senha, rekey) e o Cenário 1 (senha duas vezes → recovery key em blocos de 8).
+
+### Fase 3 — Estatística (`estatistica/`)
+
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #9): `uv run poe check`
+com 600 testes em ~15 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, Wilson 0/10 contra `prop.test(0, 10, correct = FALSE)`, visto na
+  asserção: `assert Intervalo(inferior=0.0, superior=0.0) == approx((0.0, 0.2775328))`.
+- Referências do R: `ferramentas/referencias_r/gerar.R` (R 4.5.1, epitools, DescTools). O
+  job `referencias-r` regenera `tests/fixtures/referencias_r.json` e falha se ele divergir do
+  versionado. O epiR ficou de fora: ele puxa o sf, que exige bibliotecas de sistema. As LR
+  de Simel, o inquérito e o Fleiss são a fórmula publicada recalculada no R. Os exemplos da
+  documentação do R também são testes: TeaTasting (`fisher.test`) e fumantes (`prop.trend.test`).
+- Fitness em `tests/arquitetura/test_estatistica.py`:
+  - toda função pública chamada por um teste `referencia`. Foi vista falhando com uma
+    função plantada, e já pegou um teste que chamava a função por um ajudante;
+  - `estatistica/` não lê texto livre.
+  - Isentos, com motivo: `entrada.py` (erros) e `variaveis.py` (só lê o domínio).
+- Indicadores do ADR-0004 seguem a ACG/ASGE 2024, escolha do dono. A emenda (denominador,
+  limiares, pendentes de histologia) está nas Notas do ADR-0004.
+- Divergências do oráculo, documentadas nos testes. Não houve divergência numérica entre o
+  R e o oráculo fora das bordas:
+  - p < 1e-16: a v0.1.16 dava 0 (1 − cdf) e o R dá ~1e-23;
+  - 0/0 vira NaN, não 0;
+  - Wilson com n = 0 dá [0, 1], não [0, 0];
+  - estratos todos vazios dão erro tipado;
+  - frequências dividem pelo nº de exames e mostram "Nenhuma";
+  - os indicadores de qualidade divergem de propósito.
+- O Cochran-Armitage não teve a divergência N/(N−1) esperada: a v0.1.16 já usava a
+  variância do `prop.trend.test`.
+- Unidade de análise: o exame. A prevalência de pólipo é a proporção de exames com lesão.
+- Peso no executável congelado (job `sonda-estatistica`, `windows-latest`, PyInstaller onedir):
+
+| Executável congelado | Pasta | Zip `-mx=9` (aproxima o instalador) |
+|---|---|---|
+| Sonda do SQLCipher (Fase 0, só a stdlib e o `sqlcipher3`) | 25 MB | — |
+| `gastroepi.estatistica` (numpy + scipy) | 176 MB | 69 MB |
+| + statsmodels e pandas (projeção da Fase 3b) | 209 MB | 86 MB |
+
+  O teto do ADR-0002 é 250 MB para o instalador, e o instalador comprimido fica perto do zip.
+  Sobram ~160 MB para o Qt (Fase 5), o que deve bastar. Mas a pasta instalada já passa de
+  200 MB, e o scipy é quase todo o peso. Se a Fase 6 medir perto do limite, o primeiro corte
+  é trocar o scipy por fórmulas próprias: hoje ele dá só `norm.ppf`, `chi2.sf` e
+  `fisher_exact`, e as referências do R continuam valendo como rede de segurança.
+
+Plano original da fase:
+
+- Funções a portar:
+  - Wilson e IC das razões de verossimilhança;
+  - 2x2 (OR de Woolf, RR, Pearson, Yates, Fisher) e teste diagnóstico;
+  - amostra survey e Fleiss;
+  - Cochran-Armitage, Mantel-Haenszel e qui-quadrado R×C;
+  - ADR/PDR por examinador, com alerta abaixo de 25%;
+  - frequências, estratificação e prevalência.
+- Cada função tem um teste `@pytest.mark.referencia` com o valor do R (`binom`, `epitools`,
+  `fisher.test`, `mantelhaen.test`, `prop.trend.test`) ou do Epi Info citado na docstring,
+  e um teste de paridade com o oráculo.
+- Se o R e o oráculo divergirem, vale o R, e o commit registra a divergência. Exemplo
+  esperado: as variantes do Cochran-Armitage diferem por um fator N/(N−1).
+- **Primeiro vermelho:** Wilson com 0/10 igual ao valor do R.
+- **Sai quando:** a fitness "toda função pública tem teste de referência" passa.
+
+### Fase 3b — Relatório epidemiológico fechado
+
+Pedido da conversa de 2026-10-24: o filho do dono aperta um botão e recebe um documento
+pronto, sem escolher análise, variável nem teste; no máximo escolhe o período.
+
+- **Especificação, antes do código:** uma lista de 5 a 10 perguntas combinada com o dono
+  (ex.: "histórico familiar aumenta pólipo?", "a partir de que idade aumenta o adenoma?",
+  "homem tem mais que mulher?"). Sem a lista, esta fase não começa.
+- **Conteúdo fixo:**
+  - descrição da base;
+  - associação de cada pergunta pré-exame com pólipo e com adenoma, com correção de
+    Benjamini-Hochberg;
+  - uma regressão logística multivariável (`statsmodels`) com todas as variáveis juntas;
+  - tendência por faixa etária.
+- **Frases automáticas** em português simples para cada resultado. Exemplo: "pacientes com
+  histórico familiar de 1º grau tiveram cerca de duas vezes mais chance de pólipo,
+  mesmo considerando idade e sexo".
+- **O relatório se protege sozinho:**
+  - "poucos casos, resultado não confiável" em vez de um número enganoso;
+  - quantos dados faltam por campo;
+  - aviso, e nunca travamento, quando a regressão não converge ou há separação perfeita;
+  - parágrafo fixo de limitações: são pessoas que procuraram o exame, e associação não é causa.
+- **Exportação para análise** (ADR-0004): uma linha por exame, comorbidades e sintomas
+  como colunas sim/não, sem nome, CPF ou prontuário, com dicionário de dados. É a saída
+  para quem quiser ir além do relatório (R, Jamovi).
+- **Primeiro vermelho:** a regressão logística de uma base fictícia fixa bate com o
+  `glm(..., family = binomial)` do R até 1e-6.
+
+### Fase 4 — Durabilidade ([ADR-0005](adr/0005-durabilidade-do-cofre.md))
+
+**Estado em 2026-10-31:** feita no PR da branch `claude/fase-4-durabilidade-3bcb0c`.
+`uv run poe check` passa com 688 testes em ~10 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, visto na asserção:
+  `assert False` (`where False = <…Sessao object>.somente_leitura`).
+- `tests/arquitetura/test_adr_0005.py` tem um teste por linha da Governança do ADR-0005. A
+  rotação tem propriedade do hypothesis, vista falhando com um erro de um a menos plantado.
+- API para a Fase 5:
+  - `servicos.acesso`: `desbloquear` devolve a `Sessao` com `somente_leitura` e
+    `backup_oferecido`, ou levanta `BancoIlegivel` (página 1); `restaurar_backup(pasta,
+    backup, senha)`; `PastaSincronizada`.
+  - `servicos.durabilidade`: `fazer_backup` (é o "backup manual"), `backups_do_cofre`,
+    `BackupAutomatico(sessao, relogio)` (o timer chama `tique()` e o fechar chama
+    `ao_fechar()`), `travar_instancia(pasta)`.
+  - `servicos.destino_externo`: `configurar`, `remover`, `copiar_agora` e `situacao`, com
+    `.atrasada(agora)` para o aviso.
+- Achados:
+  - O `quick_check` levanta `DatabaseError` na página com HMAC errado.
+  - Conferir pelo caminho normal gravaria o modo WAL na cópia; a conferência abre com `mode=ro`.
+  - Uma cópia no Drive não abre lá (pasta sincronizada): para restaurar dela, ela sai do
+    Drive primeiro.
+  - Na máquina do dono, `~/.dropbox` (configuração do cliente) acusava a home inteira. O
+    marcador ficou só `.dropbox.cache`.
+- Medição em 10 mil fictícios (Linux, NVMe): abrir com Argon2id + `quick_check` 0,22 s;
+  backup conferido + rotação 0,39 s.
+- Decisões de implementação: Notas do ADR-0005.
+
+Plano original da fase. Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
+
+- `quick_check` na abertura; se falhar, o banco abre em somente leitura e oferece
+  restaurar o último backup válido.
+- O backup é gravado num arquivo temporário, conferido com `integrity_check` e só então
+  renomeado para o nome final.
+- Rotação por data: 7 diários, 4 semanais e 12 mensais. Hoje, abrir o app 5 vezes num
+  dia apaga todo o histórico de backups.
+- Backup ao fechar e a cada 15 min se houve alteração.
+- Instância única por trava de arquivo (sem socket).
+- O app se recusa a abrir banco dentro de pasta sincronizada (OneDrive/Drive/Dropbox).
+- Destino externo opcional, com aviso se a última cópia tiver mais de 7 dias. Pode ser
+  um pendrive ou uma pasta do Google Drive, com três regras da conversa de 2026-10-24:
+  - o banco em uso nunca fica na pasta sincronizada; só as cópias prontas e conferidas
+    vão para lá, junto com o `gastroepi.chave`;
+  - a recovery key nunca vai para o mesmo Drive: fica no papel;
+  - com cópias na nuvem, a senha deve ser uma frase longa (~4 palavras), porque o
+    Argon2id só atrasa a adivinhação.
+- **Primeiro vermelho:** bytes corrompidos → abrir → modo somente leitura.
+
+### Fase 5 — Casca Qt (`ui_qt/`) e CLI (`cli/`)
+
+**Estado em 2026-10-31:** feita no PR da branch `claude/dazzling-jepsen-09bf42`. `uv run poe check`
+passa com 860+ testes em ~32 s e 99,8% dos ramos; `dominio` segue em 100%.
+
+- Primeiro vermelho, o Cenário 1 dirigido pelo `qtbot`, visto na asserção:
+  `assert 0 == 8` (`where 0 = len([])`, os blocos da recovery key ainda não apareciam).
+- Escolhas do dono no AskUserQuestion (2026-10-31):
+  - exportação CSV só anônima: uma linha por exame, sem nome, CPF, prontuário, nascimento
+    nem texto livre, com dicionário de dados (ADR-0004). Diverge da v0.1.16, que exportava
+    a lista identificada;
+  - ficha em abas Paciente e Exames; cada exame num diálogo, com as lesões numa tabela;
+  - recovery key em 8 blocos, sem botão copiar, e Entrar só depois de "Anotei a chave no papel";
+  - cofre numa pasta fixa: `%LOCALAPPDATA%\GastroEpi` no Windows (fora de Documentos, que
+    costuma estar no OneDrive), `$XDG_DATA_HOME/GastroEpi` nos outros.
+- Telas (`ui_qt/`, uma por arquivo): desbloqueio (criar, recovery key, entrar, recuperar), área
+  de trabalho com menu à esquerda como na v0.1.16, pacientes (`QTableView` + modelo +
+  `QSortFilterProxyModel`; 10 mil linhas carregam, ordenam e filtram em < 1 s), ficha, exame e
+  lesão, catálogos, painel (barras em `QPainter`: o QtCharts não vem no Essentials), StatCalc
+  (qualidade, 2x2, diagnóstico, amostra, tendência + qui-quadrado geral, Mantel-Haenszel,
+  estratificação), auditoria (nome do usuário, uma verificação com as três camadas em frases,
+  lista), backup (manual, lista, destino externo) e exportação com o aviso de que sai sem cifra.
+- Bloqueio por 15 min sem tecla nem clique; bloquear faz o backup se houve alteração, fecha a
+  conexão e destrói a área de trabalho. O timer do backup automático chama `tique()` a cada minuto.
+- Banco com defeito: faixa vermelha, botões que gravam desligados e o assistente de
+  restauração; tela que cai na página estragada avisa em vez de travar.
+- CLI `gastroepi` (`[project.scripts]`): sem comando abre o app; `demo` (semente, pacientes,
+  `--sem-janela`), `verificar` (integridade e % de "outro" por campo), `backup`, `exportar`.
+  A senha vem do `getpass`, nunca de argumento.
+- Serviços novos: `calculadoras`, `indicadores`, `exportar` (+ `exportacao/csv_analise.py`);
+  `acesso.nome_do_usuario`/`definir_nome_do_usuario`/`pasta_padrao`;
+  `pacientes.buscar_por_prontuario`/`buscar_por_termo`/`corresponde_ao_termo`;
+  `integridade.uso_de_outro`; `dominio.usuario`.
+- Fitness novas: `tests/arquitetura/test_paridade.py` (os 35 comandos lidos do `lib.rs`, cada
+  um com destino em `servicos` citado pela casca) e `tests/arquitetura/test_casca.py`.
+- Capturas: com `GASTROEPI_CAPTURAS`, os testes da casca salvam ~40 PNGs; o CI sobe
+  `capturas-<sistema>` como artefato.
+- Achados:
+  - `connect(lambda: self...)` derruba o PySide 6.12 com segfault quando o Python recolhe a
+    janela. Toda conexão usa método; `test_casca.py` barra lambda e função aninhada.
+  - Sair do `QApplication.exec()` dentro do pytest deixa o despachante interrompido e os timers
+    dos testes seguintes não disparam: `rodar` aceita outro laço de eventos.
+  - O `QTest.keyClicks` aborta o processo com caractere fora do ASCII (`qasciikey.cpp`).
+  - Na captura, os blocos da recovery key saíam cortados; agora a largura mínima é a do texto,
+    com teste.
+  - Modelo do Qt sem pai pode ser recolhido antes da tabela que o usa: os modelos têm pai.
+  - Com uma página estragada, até a leitura das preferências falha; em somente leitura a área
+    usa o nome padrão do usuário.
+- `estatistica` não mudou.
+
+Plano original da fase:
+
+- Telas, uma por módulo:
+  - desbloqueio (criar senha, senha, recovery key);
+  - pacientes (`QTableView` com modelo, ordenação e filtro para 10 mil linhas; formulário; catálogos);
+  - painel com gráficos;
+  - StatCalc (qualidade, 2x2, diagnóstico, amostra, tendência, Mantel-Haenszel);
+  - auditoria (lista, verificações, integridade física, backup manual, nome do usuário);
+  - exportação CSV, com aviso de que o arquivo sai sem cifra.
+- Bloqueio automático do cofre após um tempo sem uso (padrão 15 min), que fecha a
+  conexão e descarta a chave.
+- CLI: `gastroepi demo`, `verificar`, `backup` e `exportar`.
+- `pytest-qt` em `offscreen`, contra `servicos` reais com banco temporário. O CI salva
+  a captura de cada tela como artefato para revisão visual.
+- **Primeiro vermelho:** Cenário 1 dirigido pelo `qtbot`.
+- **Sai quando:** os 35 comandos da v0.1.16 (tabela abaixo) existem em `servicos` e são
+  alcançáveis por uma tela.
+
+### Fase 6 — Empacotamento Windows (ADR-0006: PyInstaller, Nuitka ou Briefcase)
+
+- Instalador gerado no CI em cada tag.
+- `GastroEpi.exe --smoke`: abre um banco temporário, cria senha, cadastra um paciente
+  fictício, verifica e sai com 0.
+- Medir tamanho e abertura a frio contra os limites do ADR-0002.
+- Roteiro manual de ~10 min na máquina Windows de teste, só com fictícios, numa pasta
+  descartável: abrir e criar senha → cadastrar → editar → excluir → painel → StatCalc →
+  exportar → fechar e reabrir.
+- **Sai quando:** o roteiro passa e o `--smoke` está verde no CI.
+
+Estado (2026-10-31): ADR-0006 aceito (PyInstaller onedir + Inno Setup por usuário, sem
+administrador). Medido no `windows-latest` com o app inteiro: pasta de 272 MB, 7z LZMA2 de
+62 MB (o compressor do Inno), janela pronta em 3,9 s na 1ª rodada. O scipy fica: a folga para o
+teto é de 4x. O job `instalador (windows)` congela, gera o instalador, instala em silêncio e roda o
+`--smoke` do instalado em todo PR, falhando acima de 250 MB ou 8 s. O instalador sai como
+artefato (90 dias em tag `v*`). Falta o roteiro manual (`docs/ROTEIRO-WINDOWS.md`) na máquina de
+teste, que é do Mateus.
+
+### Fase 7 — Corte
+
+- Um commit remove `src-tauri/`, os arquivos TS/CSS de `src/`, `package*.json`,
+  `index.html`, `public/`, `vite.config.ts`, `tsconfig*.json`, o `build.yml` do Tauri
+  e o manifesto Flatpak do Tauri.
+- README em Python; tag `v0.2.0` com o instalador.
+- Os PRs do Dependabot de cargo/npm perdem o objeto e são fechados, com o seu OK.
+
+Feito em 2026-10-31, menos a tag e o fechamento dos PRs, que esperam o merge e o OK do dono.
+Nada em Python lia mais o oráculo vivo, exceto `test_paridade.py`, que lia `src-tauri/src/lib.rs`;
+a lista dos 35 comandos foi congelada em `tests/fixtures/comandos_tauri_v0_1_16.json`. Saíram junto
+`ferramentas/oraculo_rust/` e o job "oráculo v0.1.16 congelado". Os fixtures ficam como registro
+da paridade, e a fonte de cada um é a v0.1.16:
+
+| Fixture | Gerado por, na v0.1.16 |
+|---|---|
+| `oraculo_rust_v0_1_16.json5` | `ferramentas/oraculo_rust/` (crate que inclui `src-tauri/src/math/`) |
+| `vetores_validacao_v0_1_16.json` | `src/validation.ts`, rodado no Node |
+| `comandos_tauri_v0_1_16.json` | `generate_handler!` de `src-tauri/src/lib.rs`, lido com `git show v0.1.16:` |
+
+Depois do corte, o repositório recomeçou limpo, só com o Python, sem o histórico da v0.1.16: os fixtures não são mais regerados nem editados à mão.
+
+## Paridade: os 35 comandos da v0.1.16
+
+| Grupo | Comandos Tauri | Destino em Python |
+|---|---|---|
+| Acesso (7) | `tem_senha_configurada`, `configurar_senha`, `desbloquear`, `desbloquear_com_chave`, `esta_desbloqueado`, `obter_nome_usuario`, `definir_nome_usuario` | `servicos.acesso` |
+| Pacientes (7) | `listar_pacientes`, `buscar_paciente`, `buscar_paciente_por_prontuario`, `buscar_paciente_por_termo`, `cadastrar_paciente`, `editar_paciente`, `excluir_paciente` | `servicos.pacientes` |
+| Catálogos (4) | `listar_comorbidades_catalogo`, `adicionar_comorbidade_catalogo`, `listar_sintomas_catalogo`, `adicionar_sintoma_catalogo` | `servicos.pacientes` (a Fase 2 os pôs junto dos pacientes) |
+| Integridade (5) | `listar_auditoria`, `verificar_integridade`, `verificar_integridade_dados`, `diagnosticar_integridade_fisica`, `realizar_backup` | `servicos.integridade`; `realizar_backup` → `servicos.durabilidade.fazer_backup` |
+| Calculadoras (7) | `calcular_tabela_2x2`, `calcular_teste_diagnostico`, `calcular_amostra_survey`, `calcular_amostra_comparativa`, `calcular_tendencia_cochran_armitage`, `calcular_mantel_haenszel`, `calcular_qui_quadrado_geral` | `servicos.calculadoras` → `estatistica` |
+| Estatística do banco (4) | `obter_indicadores_qualidade`, `obter_frequencias`, `obter_estratificacao`, `obter_prevalencia_polipo` | `servicos.indicadores` → `estatistica` |
+| Exportação (1) | `exportar_pacientes_csv` | `servicos.exportar` → `exportacao` (só anônima, escolha do dono) |
+
+Verificada por `tests/arquitetura/test_paridade.py`. Sem função própria, de propósito:
+`esta_desbloqueado` é ter uma `Sessao` aberta; as três verificações viraram
+`integridade.verificar`; `obter_frequencias` sai em `indicadores.painel`; a busca por termo da
+tabela aplica `pacientes.corresponde_ao_termo`, a regra de `buscar_por_termo`.
+
+## Fitness functions
+
+| Driver | Checagem | Tipo | Onde roda | Falha quando |
+|---|---|---|---|---|
+| ★ Integridade | Teste de estado do hypothesis com mutações aleatórias → verificar cadeia e dados | Holística, contínua | CI | Qualquer inconsistência |
+| ★ Integridade | Adulteração externa de 1 linha (Cenário 3) | Atômica, contínua | CI | Não acusa a 1ª entrada afetada |
+| ★ Integridade | `UPDATE`/`DELETE` em `auditoria` | Atômica, contínua | CI | Não levanta erro |
+| ★ Confidencialidade | Busca de nome/CPF/prontuário/laudo/comorbidade conhecidos nos bytes do `.db`, do `-wal`, dos backups e do `gastroepi.chave` (ADR-0003) | Holística, contínua | CI | Qualquer achado |
+| ★ Confidencialidade | O `sqlite3` da stdlib não abre o banco; 1 byte trocado é acusado pelo HMAC de página (ADR-0003) | Atômica, contínua | CI | Abre, ou a adulteração passa |
+| Implantabilidade | Spike do `sqlcipher3` congelado em `windows-latest` (ADR-0003) | Atômica, acionada na Fase 0 | CI | O executável não cria/reabre o banco |
+| ★ Fronteiras | Contratos do import-linter (núcleo ↛ casca; casca ↛ persistência/cofre; só `persistencia` usa `sqlite3`) | Atômica, contínua | CI + pre-commit | Contrato quebrado |
+| Soberania local | `pytest --disable-socket` + contrato proibindo módulos de rede | Atômica, contínua | CI | Socket aberto ou import de rede |
+| Fidelidade estatística | Todas as funções públicas de `estatistica/` com teste `referencia`; paridade com o oráculo | Atômica, contínua | CI | Função sem teste ou divergência acima da tolerância |
+| Implantabilidade | Build do instalador, instalação silenciosa e `--smoke` do instalado em `windows-latest`; tamanho e tempo (ADR-0006) | Holística, contínua (todo PR e tag) | CI | `--smoke` ≠ 0, > 250 MB ou > 8 s |
+| Implantabilidade | Roteiro de 10 min na máquina Windows de teste | Manual, antes de cada entrega | Mateus | Qualquer passo estranho anotado sem correção |
+| ★ Durabilidade | Banco estragado → somente leitura + oferta; cópia ruim nunca ganha o nome; rotação por data; pasta sincronizada recusada (ADR-0005) | Atômica + holística (hypothesis), contínua | CI | Qualquer linha da Governança do ADR-0005 |
+| Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
+| Legibilidade | `tests/arquitetura` + `mypy --strict` | Atômica, contínua | CI + pre-commit | Arquivo > 400, função > 40, erro de tipo |
+| Paridade | `test_paridade.py`: os 35 comandos do `lib.rs` da v0.1.16 (`comandos_tauri_v0_1_16.json`) com destino em `servicos` citado pela casca | Atômica, contínua | CI | Comando sem destino ou sem tela |
+| Casca estável | `test_casca.py`: nenhum `connect` com lambda ou closure (segfault do PySide) | Atômica, contínua | CI | Qualquer achado |
+| Revisão visual | Capturas das telas como artefato do CI | Manual, a cada PR da casca | Revisor | Tela cortada ou confusa |
+
+## Contrato para o agente
+
+Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
+
+## Próximo passo
+
+Mateus roda `docs/ROTEIRO-WINDOWS.md` na máquina Windows de teste com o instalador do CI; passou,
+sai a tag `v0.2.0` com o instalador (o corte do Tauri da Fase 7 já está feito). A Fase 3b (relatório fechado) continua
+esperando a lista de perguntas do dono.
