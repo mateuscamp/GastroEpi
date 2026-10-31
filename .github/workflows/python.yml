@@ -100,6 +100,39 @@ jobs:
       - name: Comparar com tests/fixtures/referencias_r.json
         run: diff -u tests/fixtures/referencias_r.json referencias_r.json
 
+  sonda-estatistica:
+    name: peso da estatística congelada (windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Instalar
+        run: uv sync --locked
+      # ADR-0002: o instalador inteiro tem teto de 250 MB; isto mede a parte de numpy/scipy.
+      - name: Congelar a sonda (Fase 3, numpy + scipy)
+        run: uv run --with pyinstaller pyinstaller --noconfirm --onedir --name sonda_estatistica ferramentas/sonda_estatistica.py
+      - name: Rodar o executável congelado
+        run: ./dist/sonda_estatistica/sonda_estatistica.exe
+      # Projeção da Fase 3b: statsmodels (e pandas) entram com a regressão logística.
+      - name: Congelar a sonda com statsmodels (projeção da Fase 3b)
+        run: >-
+          uv run --with pyinstaller --with statsmodels pyinstaller --noconfirm --onedir
+          --name sonda_estatistica_3b --hidden-import statsmodels.api ferramentas/sonda_estatistica.py
+      - name: Rodar o executável congelado da projeção
+        run: ./dist/sonda_estatistica_3b/sonda_estatistica_3b.exe --3b
+      - name: Tamanho das pastas e do zip (aproxima o instalador)
+        run: |
+          for pasta in sonda_estatistica sonda_estatistica_3b; do
+            7z a -tzip -mx=9 "dist/$pasta.zip" "./dist/$pasta" > /dev/null
+            echo "$pasta: pasta $(du -sh "dist/$pasta" | cut -f1), zip $(du -h "dist/$pasta.zip" | cut -f1)"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+
   dependencias:
     name: vulnerabilidades nas dependências
     runs-on: ubuntu-latest
