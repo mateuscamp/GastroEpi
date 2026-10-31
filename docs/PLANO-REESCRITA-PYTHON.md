@@ -126,6 +126,31 @@ passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
 
 ### Fase 1 — Domínio e validação (`dominio/`)
 
+**Estado em 2026-10-31:** feita e verde localmente (Linux): `uv run poe check` com 227
+testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
+Falta ver o CI em Ubuntu e Windows.
+
+- Tipos do ADR-0004: `Paciente`, `HistoricoFamiliar`, `Exame`, `Examinador` (nome + CRM
+  + UF), `Boston`, `Lesao` e as listas fechadas em `dominio/listas.py` (`VERSAO_DAS_LISTAS = 1`).
+  CPF e prontuário são tipos de campo (`campos.py`), não classes.
+- Derivados como propriedades, nunca campos: `n_polipos`, grau do parentesco, idade no
+  exame, adenoma convencional, adenoma avançado (USMSTF 2020), serrilhada, preparo
+  adequado (Boston, Calderwood 2014) e "aguardando histologia".
+- `problemas_de` traduz o `ValidationError` para (campo, código, mensagem pt-BR). O
+  `repr` e as mensagens nunca mostram nome, CPF, prontuário, nascimento ou texto livre.
+- Escolhas do dono no AskUserQuestion (registradas no ADR-0004, Notas): 12 parentescos
+  com grau da genética médica; 6 motivos de não intubação + outro; "aguardando" separado
+  de "sem histologia" e displasia coerente com a histologia; só a intubação cecal é
+  obrigatória entre os campos de qualidade.
+- Divergências da v0.1.16, de propósito: CPF com letra é recusado (a v0.1.16 apagava a
+  letra); data fora do ISO é recusada em vez de virar vazio; o eco `formatado`/`iso` das
+  entradas inválidas não é reproduzido, porque a entrada inválida é recusada.
+- Achado: "um dígito trocado falha" não vale para todo CPF. Em 0,18% das trocas o resto
+  passa de 0 para 1 (ou o inverso) e o DV continua 0 (ex.: `704.999.622-06` e
+  `804.999.622-06`). A propriedade do hypothesis exclui essa dobra, e um teste a documenta.
+
+Plano original da fase:
+
 - `Paciente`, `HistoricoFamiliar`, `Cpf`, `Prontuario`, datas `dd/mm/aaaa` ↔ ISO,
   `Sexo` e indicação. Pydantic estrito: rejeita `True` em campo inteiro (Princípio V),
   converte vazio ou espaço em `None`, normaliza o CPF para 11 dígitos com DV e recusa
