@@ -9,7 +9,9 @@ Arquitetura: monólito modular · Quantum: 1 executável, 1 banco. ADRs em `docs
 - Setup: `uv sync`
 - Testes: `uv run pytest`. Roda headless (`QT_QPA_PLATFORM=offscreen`), sem rede e sem senha real.
 - Checagem completa: `uv run poe check` (ruff, mypy --strict, lint-imports, pytest com cobertura ≥ 90%).
-- Rodar: `uv run gastroepi` e `uv run gastroepi demo` chegam na Fase 5.
+- Rodar: `uv run gastroepi` (cofre em `%LOCALAPPDATA%\GastroEpi`) e `uv run gastroepi demo` (fictícios
+  com semente numa pasta temporária, já desbloqueado; a senha aparece no terminal).
+- Capturas das telas: `GASTROEPI_CAPTURAS=<pasta> uv run pytest tests/ui_qt`.
 
 Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 
@@ -58,6 +60,10 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 - Proibido para ficar verde: mudar asserção, `skip`/`xfail`, apagar teste, enfraquecer asserção, mockar o sujeito, `try/except` no teste.
 
 ## Testes
+
+- Casca: `pytest-qt` contra serviços reais em `tmp_path`; caixa modal entra por `Perguntas`
+  injetada. `connect` nunca recebe lambda ou closure (segfault do PySide; `test_casca.py`).
+  Digitar acento no teste é `setText`: o `keyClicks` aborta fora do ASCII.
 
 - I/O com fake nomeado e injetado (relógio, sistema de arquivos). Banco: SQLite real em `tmp_path`, nunca mock.
 - Para `src/gastroepi/<modulo>/<arquivo>.py` existe `tests/<modulo>/test_<arquivo>.py`.

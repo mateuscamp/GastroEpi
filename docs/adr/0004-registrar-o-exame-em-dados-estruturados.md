@@ -165,3 +165,8 @@ Estende: 0002, 0003
   `serrilhada` no domínio.
 - O alerta informa se o IC de Wilson inteiro está abaixo da meta: com poucos exames, estar
   abaixo da meta pode ser acaso.
+
+**Exportação da tela (2026-10-31, Fase 5, escolha do dono no AskUserQuestion):** a exportação
+CSV do app é só a anônima para análise descrita acima. A data do exame sai como ano, o paciente
+como número sequencial do arquivo, e nenhum texto livre sai (observação, laudo e descrições de
+"outra" podem conter um nome). A lista identificada da v0.1.16 não tem sucessor.

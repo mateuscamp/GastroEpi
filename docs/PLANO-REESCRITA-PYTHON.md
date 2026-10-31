@@ -355,6 +355,56 @@ Plano original da fase. Trata as lacunas levantadas em 2026-10-24 (branch `docs/
 
 ### Fase 5 — Casca Qt (`ui_qt/`) e CLI (`cli/`)
 
+**Estado em 2026-10-31:** feita no PR da branch `claude/dazzling-jepsen-09bf42`. `uv run poe check`
+passa com 860+ testes em ~32 s e 99,8% dos ramos; `dominio` segue em 100%.
+
+- Primeiro vermelho, o Cenário 1 dirigido pelo `qtbot`, visto na asserção:
+  `assert 0 == 8` (`where 0 = len([])`, os blocos da recovery key ainda não apareciam).
+- Escolhas do dono no AskUserQuestion (2026-10-31):
+  - exportação CSV só anônima: uma linha por exame, sem nome, CPF, prontuário, nascimento
+    nem texto livre, com dicionário de dados (ADR-0004). Diverge da v0.1.16, que exportava
+    a lista identificada;
+  - ficha em abas Paciente e Exames; cada exame num diálogo, com as lesões numa tabela;
+  - recovery key em 8 blocos, sem botão copiar, e Entrar só depois de "Anotei a chave no papel";
+  - cofre numa pasta fixa: `%LOCALAPPDATA%\GastroEpi` no Windows (fora de Documentos, que
+    costuma estar no OneDrive), `$XDG_DATA_HOME/GastroEpi` nos outros.
+- Telas (`ui_qt/`, uma por arquivo): desbloqueio (criar, recovery key, entrar, recuperar), área
+  de trabalho com menu à esquerda como na v0.1.16, pacientes (`QTableView` + modelo +
+  `QSortFilterProxyModel`; 10 mil linhas carregam, ordenam e filtram em < 1 s), ficha, exame e
+  lesão, catálogos, painel (barras em `QPainter`: o QtCharts não vem no Essentials), StatCalc
+  (qualidade, 2x2, diagnóstico, amostra, tendência + qui-quadrado geral, Mantel-Haenszel,
+  estratificação), auditoria (nome do usuário, uma verificação com as três camadas em frases,
+  lista), backup (manual, lista, destino externo) e exportação com o aviso de que sai sem cifra.
+- Bloqueio por 15 min sem tecla nem clique; bloquear faz o backup se houve alteração, fecha a
+  conexão e destrói a área de trabalho. O timer do backup automático chama `tique()` a cada minuto.
+- Banco com defeito: faixa vermelha, botões que gravam desligados e o assistente de
+  restauração; tela que cai na página estragada avisa em vez de travar.
+- CLI `gastroepi` (`[project.scripts]`): sem comando abre o app; `demo` (semente, pacientes,
+  `--sem-janela`), `verificar` (integridade e % de "outro" por campo), `backup`, `exportar`.
+  A senha vem do `getpass`, nunca de argumento.
+- Serviços novos: `calculadoras`, `indicadores`, `exportar` (+ `exportacao/csv_analise.py`);
+  `acesso.nome_do_usuario`/`definir_nome_do_usuario`/`pasta_padrao`;
+  `pacientes.buscar_por_prontuario`/`buscar_por_termo`/`corresponde_ao_termo`;
+  `integridade.uso_de_outro`; `dominio.usuario`.
+- Fitness novas: `tests/arquitetura/test_paridade.py` (os 35 comandos lidos do `lib.rs`, cada
+  um com destino em `servicos` citado pela casca) e `tests/arquitetura/test_casca.py`.
+- Capturas: com `GASTROEPI_CAPTURAS`, os testes da casca salvam ~40 PNGs; o CI sobe
+  `capturas-<sistema>` como artefato.
+- Achados:
+  - `connect(lambda: self...)` derruba o PySide 6.12 com segfault quando o Python recolhe a
+    janela. Toda conexão usa método; `test_casca.py` barra lambda e função aninhada.
+  - Sair do `QApplication.exec()` dentro do pytest deixa o despachante interrompido e os timers
+    dos testes seguintes não disparam: `rodar` aceita outro laço de eventos.
+  - O `QTest.keyClicks` aborta o processo com caractere fora do ASCII (`qasciikey.cpp`).
+  - Na captura, os blocos da recovery key saíam cortados; agora a largura mínima é a do texto,
+    com teste.
+  - Modelo do Qt sem pai pode ser recolhido antes da tabela que o usa: os modelos têm pai.
+  - Com uma página estragada, até a leitura das preferências falha; em somente leitura a área
+    usa o nome padrão do usuário.
+- `estatistica` não mudou.
+
+Plano original da fase:
+
 - Telas, uma por módulo:
   - desbloqueio (criar senha, senha, recovery key);
   - pacientes (`QTableView` com modelo, ordenação e filtro para 10 mil linhas; formulário; catálogos);
@@ -396,11 +446,16 @@ Plano original da fase. Trata as lacunas levantadas em 2026-10-24 (branch `docs/
 |---|---|---|
 | Acesso (7) | `tem_senha_configurada`, `configurar_senha`, `desbloquear`, `desbloquear_com_chave`, `esta_desbloqueado`, `obter_nome_usuario`, `definir_nome_usuario` | `servicos.acesso` |
 | Pacientes (7) | `listar_pacientes`, `buscar_paciente`, `buscar_paciente_por_prontuario`, `buscar_paciente_por_termo`, `cadastrar_paciente`, `editar_paciente`, `excluir_paciente` | `servicos.pacientes` |
-| Catálogos (4) | `listar_`/`adicionar_comorbidade_catalogo`, `listar_`/`adicionar_sintoma_catalogo` | `servicos.catalogos` |
+| Catálogos (4) | `listar_comorbidades_catalogo`, `adicionar_comorbidade_catalogo`, `listar_sintomas_catalogo`, `adicionar_sintoma_catalogo` | `servicos.pacientes` (a Fase 2 os pôs junto dos pacientes) |
 | Integridade (5) | `listar_auditoria`, `verificar_integridade`, `verificar_integridade_dados`, `diagnosticar_integridade_fisica`, `realizar_backup` | `servicos.integridade`; `realizar_backup` → `servicos.durabilidade.fazer_backup` |
 | Calculadoras (7) | `calcular_tabela_2x2`, `calcular_teste_diagnostico`, `calcular_amostra_survey`, `calcular_amostra_comparativa`, `calcular_tendencia_cochran_armitage`, `calcular_mantel_haenszel`, `calcular_qui_quadrado_geral` | `servicos.calculadoras` → `estatistica` |
 | Estatística do banco (4) | `obter_indicadores_qualidade`, `obter_frequencias`, `obter_estratificacao`, `obter_prevalencia_polipo` | `servicos.indicadores` → `estatistica` |
-| Exportação (1) | `exportar_pacientes_csv` | `servicos.exportar` → `exportacao` |
+| Exportação (1) | `exportar_pacientes_csv` | `servicos.exportar` → `exportacao` (só anônima, escolha do dono) |
+
+Verificada por `tests/arquitetura/test_paridade.py`. Sem função própria, de propósito:
+`esta_desbloqueado` é ter uma `Sessao` aberta; as três verificações viraram
+`integridade.verificar`; `obter_frequencias` sai em `indicadores.painel`; a busca por termo da
+tabela aplica `pacientes.corresponde_ao_termo`, a regra de `buscar_por_termo`.
 
 ## Fitness functions
 
@@ -420,6 +475,9 @@ Plano original da fase. Trata as lacunas levantadas em 2026-10-24 (branch `docs/
 | ★ Durabilidade | Banco estragado → somente leitura + oferta; cópia ruim nunca ganha o nome; rotação por data; pasta sincronizada recusada (ADR-0005) | Atômica + holística (hypothesis), contínua | CI | Qualquer linha da Governança do ADR-0005 |
 | Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
 | Legibilidade | `tests/arquitetura` + `mypy --strict` | Atômica, contínua | CI + pre-commit | Arquivo > 400, função > 40, erro de tipo |
+| Paridade | `test_paridade.py`: os 35 comandos do `lib.rs` com destino em `servicos` citado pela casca | Atômica, contínua | CI | Comando sem destino ou sem tela |
+| Casca estável | `test_casca.py`: nenhum `connect` com lambda ou closure (segfault do PySide) | Atômica, contínua | CI | Qualquer achado |
+| Revisão visual | Capturas das telas como artefato do CI | Manual, a cada PR da casca | Revisor | Tela cortada ou confusa |
 | Oráculo congelado | Diff do PR em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | Atômica, contínua | CI | Qualquer mudança |
 
 ## Contrato para o agente
@@ -428,7 +486,7 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 
 ## Próximo passo
 
-Fase 3b (relatório fechado) espera a lista de perguntas do dono. Sem ela, a Fase 5 (casca
-Qt e CLI) pode começar: o primeiro vermelho é o Cenário 1 dirigido pelo `qtbot`. A tela de
-desbloqueio já tem de tratar o somente leitura, o `BancoIlegivel`, a `PastaSincronizada` e
-a `OutraInstanciaAberta` da Fase 4.
+Fase 6 (empacotamento Windows, ADR-0006 antes do código): o instalador precisa caber nos 250 MB
+com o Qt somado aos ~176 MB de numpy/scipy medidos na Fase 3. O `--smoke` pode reusar o
+`rodar(..., ao_abrir=..., laco_de_eventos=...)` da casca. A Fase 3b (relatório fechado) continua
+esperando a lista de perguntas do dono.
