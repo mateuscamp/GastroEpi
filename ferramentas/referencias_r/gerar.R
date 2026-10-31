@@ -95,10 +95,8 @@ amostra_comparativa <- function(poder, confianca, razao, p0, p1) {
 
 tendencia <- function(casos, totais, escores) {
   r <- prop.trend.test(casos, totais, score = escores)
-  ca <- CochranArmitageTest(rbind(casos, totais - casos))
   list(casos = casos, totais = totais, escores = escores,
-       qui_quadrado = unname(r$statistic), p_valor = r$p.value,
-       desctools_z = unname(ca$statistic), desctools_p_valor = ca$p.value)
+       qui_quadrado = unname(r$statistic), p_valor = r$p.value)
 }
 
 mantel_haenszel <- function(estratos) {
