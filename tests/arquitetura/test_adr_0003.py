@@ -16,7 +16,7 @@ from gastroepi.cofre.recovery_key import formatar_recovery_key, ler_recovery_key
 from gastroepi.dominio.cpf import formatar_cpf
 from gastroepi.dominio.ficha import Ficha
 from gastroepi.dominio.ficticios import gerar_fichas
-from gastroepi.servicos import integridade, pacientes
+from gastroepi.servicos import durabilidade, integridade, pacientes
 from gastroepi.servicos.acesso import (
     NOME_DA_CHAVE,
     NOME_DO_BANCO,
@@ -85,11 +85,10 @@ def test_nada_legivel_no_db_no_wal_nos_backups_e_no_arquivo_de_chave(tmp_path: P
     with sessao:
         for ficha in fichas:
             pacientes.cadastrar(sessao, ficha, usuario="teste")
-        integridade.fazer_backup(sessao, tmp_path / "backup")
+        backup = durabilidade.fazer_backup(sessao).pasta
         # Com a sessão aberta o WAL ainda tem as páginas novas: é ele que se examina.
         wal = pasta / f"{NOME_DO_BANCO}-wal"
         assert wal.stat().st_size > 0
-        backup = tmp_path / "backup"
         arquivos = [pasta / NOME_DO_BANCO, wal, pasta / NOME_DA_CHAVE,
                     backup / NOME_DO_BANCO, backup / NOME_DA_CHAVE]  # fmt: skip
         conteudos = {f"{a.parent.name}/{a.name}": a.read_bytes() for a in arquivos}
@@ -110,9 +109,9 @@ def test_nada_legivel_no_db_no_wal_nos_backups_e_no_arquivo_de_chave(tmp_path: P
 def test_sqlite3_da_stdlib_nao_abre_e_o_cabecalho_nao_e_de_sqlite(tmp_path: Path) -> None:
     cofre_com_fichas(tmp_path / "cofre", quantidade=2)
     with desbloquear(tmp_path / "cofre", SENHA) as sessao:
-        integridade.fazer_backup(sessao, tmp_path / "backup")
+        backup = durabilidade.fazer_backup(sessao)
 
-    for banco in (tmp_path / "cofre" / NOME_DO_BANCO, tmp_path / "backup" / NOME_DO_BANCO):
+    for banco in (tmp_path / "cofre" / NOME_DO_BANCO, backup.banco):
         assert not banco.read_bytes().startswith(b"SQLite format 3")
         comum = sqlite3.connect(banco)
         with pytest.raises(sqlite3.DatabaseError, match="not a database"):

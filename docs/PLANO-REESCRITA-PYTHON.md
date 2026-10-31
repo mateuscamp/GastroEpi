@@ -1,7 +1,8 @@
 # GastroEpi — decisão 0002: como reescrever o app inteiro em Python
 
 **Status:** Aceito · **Data:** 2026-10-31 · ADRs: [0002](adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md),
-[0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md), [0004](adr/0004-registrar-o-exame-em-dados-estruturados.md)
+[0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md), [0004](adr/0004-registrar-o-exame-em-dados-estruturados.md),
+[0005](adr/0005-durabilidade-do-cofre.md)
 
 Origem das ideias de durabilidade, relatório e exportação: a conversa de 2026-10-24
 (sessão `claude.ai/code/session_01EzZwqyjZDjVB2241MnSp7N`), registrada em
@@ -303,9 +304,36 @@ pronto, sem escolher análise, variável nem teste; no máximo escolhe o períod
 - **Primeiro vermelho:** a regressão logística de uma base fictícia fixa bate com o
   `glm(..., family = binomial)` do R até 1e-6.
 
-### Fase 4 — Durabilidade (ADR-0005)
+### Fase 4 — Durabilidade ([ADR-0005](adr/0005-durabilidade-do-cofre.md))
 
-Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
+**Estado em 2026-10-31:** feita no PR da branch `claude/fase-4-durabilidade-3bcb0c`.
+`uv run poe check` passa com 688 testes em ~10 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, visto na asserção:
+  `assert False` (`where False = <…Sessao object>.somente_leitura`).
+- `tests/arquitetura/test_adr_0005.py` tem um teste por linha da Governança do ADR-0005. A
+  rotação tem propriedade do hypothesis, vista falhando com um erro de um a menos plantado.
+- API para a Fase 5:
+  - `servicos.acesso`: `desbloquear` devolve a `Sessao` com `somente_leitura` e
+    `backup_oferecido`, ou levanta `BancoIlegivel` (página 1); `restaurar_backup(pasta,
+    backup, senha)`; `PastaSincronizada`.
+  - `servicos.durabilidade`: `fazer_backup` (é o "backup manual"), `backups_do_cofre`,
+    `BackupAutomatico(sessao, relogio)` (o timer chama `tique()` e o fechar chama
+    `ao_fechar()`), `travar_instancia(pasta)`.
+  - `servicos.destino_externo`: `configurar`, `remover`, `copiar_agora` e `situacao`, com
+    `.atrasada(agora)` para o aviso.
+- Achados:
+  - O `quick_check` levanta `DatabaseError` na página com HMAC errado.
+  - Conferir pelo caminho normal gravaria o modo WAL na cópia; a conferência abre com `mode=ro`.
+  - Uma cópia no Drive não abre lá (pasta sincronizada): para restaurar dela, ela sai do
+    Drive primeiro.
+  - Na máquina do dono, `~/.dropbox` (configuração do cliente) acusava a home inteira. O
+    marcador ficou só `.dropbox.cache`.
+- Medição em 10 mil fictícios (Linux, NVMe): abrir com Argon2id + `quick_check` 0,22 s;
+  backup conferido + rotação 0,39 s.
+- Decisões de implementação: Notas do ADR-0005.
+
+Plano original da fase. Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 
 - `quick_check` na abertura; se falhar, o banco abre em somente leitura e oferece
   restaurar o último backup válido.
@@ -369,7 +397,7 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 | Acesso (7) | `tem_senha_configurada`, `configurar_senha`, `desbloquear`, `desbloquear_com_chave`, `esta_desbloqueado`, `obter_nome_usuario`, `definir_nome_usuario` | `servicos.acesso` |
 | Pacientes (7) | `listar_pacientes`, `buscar_paciente`, `buscar_paciente_por_prontuario`, `buscar_paciente_por_termo`, `cadastrar_paciente`, `editar_paciente`, `excluir_paciente` | `servicos.pacientes` |
 | Catálogos (4) | `listar_`/`adicionar_comorbidade_catalogo`, `listar_`/`adicionar_sintoma_catalogo` | `servicos.catalogos` |
-| Integridade (5) | `listar_auditoria`, `verificar_integridade`, `verificar_integridade_dados`, `diagnosticar_integridade_fisica`, `realizar_backup` | `servicos.integridade` |
+| Integridade (5) | `listar_auditoria`, `verificar_integridade`, `verificar_integridade_dados`, `diagnosticar_integridade_fisica`, `realizar_backup` | `servicos.integridade`; `realizar_backup` → `servicos.durabilidade.fazer_backup` |
 | Calculadoras (7) | `calcular_tabela_2x2`, `calcular_teste_diagnostico`, `calcular_amostra_survey`, `calcular_amostra_comparativa`, `calcular_tendencia_cochran_armitage`, `calcular_mantel_haenszel`, `calcular_qui_quadrado_geral` | `servicos.calculadoras` → `estatistica` |
 | Estatística do banco (4) | `obter_indicadores_qualidade`, `obter_frequencias`, `obter_estratificacao`, `obter_prevalencia_polipo` | `servicos.indicadores` → `estatistica` |
 | Exportação (1) | `exportar_pacientes_csv` | `servicos.exportar` → `exportacao` |
@@ -389,6 +417,7 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 | Fidelidade estatística | Todas as funções públicas de `estatistica/` com teste `referencia`; paridade com o oráculo | Atômica, contínua | CI | Função sem teste ou divergência acima da tolerância |
 | Implantabilidade | Build do instalador + `--smoke` em `windows-latest`; tamanho | Holística, acionada por tag | CI | `--smoke` ≠ 0 ou > 250 MB |
 | Implantabilidade | Roteiro de 10 min na máquina Windows de teste | Manual, antes de cada entrega | Mateus | Qualquer passo estranho anotado sem correção |
+| ★ Durabilidade | Banco estragado → somente leitura + oferta; cópia ruim nunca ganha o nome; rotação por data; pasta sincronizada recusada (ADR-0005) | Atômica + holística (hypothesis), contínua | CI | Qualquer linha da Governança do ADR-0005 |
 | Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
 | Legibilidade | `tests/arquitetura` + `mypy --strict` | Atômica, contínua | CI + pre-commit | Arquivo > 400, função > 40, erro de tipo |
 | Oráculo congelado | Diff do PR em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | Atômica, contínua | CI | Qualquer mudança |
@@ -399,6 +428,7 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 
 ## Próximo passo
 
-Fase 3b (relatório fechado) espera a lista de perguntas do dono. Sem ela, a Fase 4
-(durabilidade) pode começar: o primeiro vermelho são bytes corrompidos → abrir → modo
-somente leitura.
+Fase 3b (relatório fechado) espera a lista de perguntas do dono. Sem ela, a Fase 5 (casca
+Qt e CLI) pode começar: o primeiro vermelho é o Cenário 1 dirigido pelo `qtbot`. A tela de
+desbloqueio já tem de tratar o somente leitura, o `BancoIlegivel`, a `PastaSincronizada` e
+a `OutraInstanciaAberta` da Fase 4.

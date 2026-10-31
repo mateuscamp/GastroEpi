@@ -20,4 +20,6 @@ def connect(
     detect_types: int = ...,
     isolation_level: str | None = ...,
     check_same_thread: bool = ...,
+    cached_statements: int = ...,
+    uri: bool = ...,
 ) -> Connection: ...

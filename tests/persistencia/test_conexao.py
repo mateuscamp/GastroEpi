@@ -9,8 +9,12 @@ import sqlcipher3
 from gastroepi.persistencia.conexao import (
     ChaveIncorreta,
     abrir_conexao,
+    abrir_para_conferir,
+    copia_integra,
     copiar_banco,
     paginas_corrompidas,
+    passa_no_quick_check,
+    proibir_escrita,
     transacao,
     trocar_chave,
 )
@@ -164,4 +168,54 @@ def test_erro_que_ja_desfez_a_transacao_nao_e_mascarado_pelo_rollback(
     ):
         conexao.execute("INSERT INTO t VALUES ('x')")
     assert not conexao.in_transaction
+    conexao.close()
+
+
+# ── Checagem da abertura e conferência de cópia (ADR-0005) ────────────
+
+
+def test_quick_check_passa_no_banco_integro_e_reprova_pagina_corrompida(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    conexao.execute(
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 40)"
+        " INSERT INTO t SELECT hex(randomblob(500)) FROM n"
+    )
+    assert passa_no_quick_check(conexao)
+    conexao.close()
+    bruto = bytearray(caminho.read_bytes())
+    bruto[len(bruto) // 2 + 100] ^= 0xFF
+    caminho.write_bytes(bytes(bruto))
+
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    assert not passa_no_quick_check(conexao)
+    conexao.close()
+
+
+def test_copia_integra_reprova_chave_errada_e_arquivo_que_nao_e_banco(
+    caminho: Path, chave_de_dados: bytes, tmp_path: Path
+) -> None:
+    lixo = tmp_path / "lixo.db"
+    lixo.write_bytes(b"x" * 8192)
+
+    assert copia_integra(caminho, chave_de_dados)
+    assert not copia_integra(caminho, OUTRA_CHAVE)
+    assert not copia_integra(lixo, chave_de_dados)
+
+
+def test_abrir_para_conferir_nao_escreve(caminho: Path, chave_de_dados: bytes) -> None:
+    conexao = abrir_para_conferir(caminho, chave_de_dados)
+
+    with pytest.raises(sqlcipher3.OperationalError, match="readonly"):
+        conexao.execute("INSERT INTO t VALUES ('x')")
+    conexao.close()
+
+
+def test_proibir_escrita_barra_o_insert(caminho: Path, chave_de_dados: bytes) -> None:
+    conexao = abrir_conexao(caminho, chave_de_dados)
+    proibir_escrita(conexao)
+
+    with pytest.raises(sqlcipher3.OperationalError, match="readonly"):
+        conexao.execute("INSERT INTO t VALUES ('x')")
     conexao.close()

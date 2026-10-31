@@ -2,7 +2,8 @@
 
 Cria um cofre temporário pela porta das cascas (`servicos`), cadastra os fictícios um a
 um (cada cadastro na sua transação, com o evento de auditoria) e cronometra listar,
-buscar e verificar. Uso:
+buscar e verificar. Desde a Fase 4, também a abertura (Argon2id + `quick_check`) e o
+backup conferido (ADR-0005). Uso:
 
     uv run python ferramentas/medir_listagem.py [quantidade] [pasta-base]
 
@@ -18,8 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from gastroepi.dominio.ficticios import gerar_fichas
-from gastroepi.servicos import integridade, pacientes
-from gastroepi.servicos.acesso import NOME_DO_BANCO, criar_cofre
+from gastroepi.servicos import durabilidade, integridade, pacientes
+from gastroepi.servicos.acesso import NOME_DO_BANCO, criar_cofre, desbloquear
 
 SENHA = "senha da medição"
 REPETICOES = 3
@@ -49,6 +50,8 @@ def medir(pasta: Path, quantidade: int) -> None:
         cronometrar(f"listar {quantidade} fichas completas", lambda: pacientes.listar(sessao))
         cronometrar("buscar 1 ficha", lambda: pacientes.buscar(sessao, quantidade // 2))
         cronometrar("verificar (páginas, cadeia e dados)", lambda: integridade.verificar(sessao))
+        cronometrar("backup conferido + rotação", lambda: durabilidade.fazer_backup(sessao))
+    cronometrar("abrir (Argon2id + quick_check)", lambda: desbloquear(pasta, SENHA).fechar())
     tamanho = (pasta / NOME_DO_BANCO).stat().st_size / 2**20
     print(f"gastroepi.db: {tamanho:.1f} MiB")
 

@@ -4,11 +4,32 @@ import sqlcipher3
 
 from gastroepi.auditoria.cadeia import ELO_INICIAL, EntradaDeAuditoria, Evento, calcular_elo
 
+# Preferências não colidem com chaves internas como `chave_auditoria`.
+_PREFIXO = "preferencia."
+
 
 def ler_chave_de_auditoria(conexao: sqlcipher3.Connection) -> bytes:
     linha = conexao.execute("SELECT valor FROM metadados WHERE chave = 'chave_auditoria'")
     chave: bytes = linha.fetchone()[0]
     return chave
+
+
+def ler_metadado(conexao: sqlcipher3.Connection, nome: str) -> str | None:
+    """Preferências do app (ex.: destino externo, ADR-0005). Não são dado clínico e não
+    entram na auditoria; ficam no banco cifrado."""
+    linha = conexao.execute("SELECT valor FROM metadados WHERE chave = ?", (_PREFIXO + nome,))
+    encontrada = linha.fetchone()
+    return None if encontrada is None else bytes(encontrada[0]).decode("utf-8")
+
+
+def gravar_metadado(conexao: sqlcipher3.Connection, nome: str, valor: str | None) -> None:
+    if valor is None:
+        conexao.execute("DELETE FROM metadados WHERE chave = ?", (_PREFIXO + nome,))
+        return
+    conexao.execute(
+        "INSERT OR REPLACE INTO metadados (chave, valor) VALUES (?, ?)",
+        (_PREFIXO + nome, valor.encode("utf-8")),
+    )
 
 
 def registrar_evento(conexao: sqlcipher3.Connection, chave: bytes, evento: Evento) -> None:
