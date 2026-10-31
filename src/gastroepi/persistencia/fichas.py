@@ -15,7 +15,7 @@ from datetime import date
 
 import sqlcipher3
 
-from gastroepi.dominio.exame import Boston, Exame, Examinador
+from gastroepi.dominio.exame import Boston, Exame
 from gastroepi.dominio.ficha import Ficha
 from gastroepi.dominio.lesao import Lesao
 from gastroepi.dominio.listas import (
@@ -123,49 +123,41 @@ def _agrupar[T](pares: Iterable[tuple[int, T]]) -> dict[int, list[T]]:
     return grupos
 
 
-def _comorbidades(conexao: sqlcipher3.Connection, paciente_id: int | None) -> dict[int, list[str]]:
-    filtro, parametros = _filtro("v.paciente_id", paciente_id)
-    cursor = conexao.execute(
-        "SELECT v.paciente_id, c.nome FROM paciente_comorbidade v"
-        f" JOIN comorbidade c ON c.id = v.comorbidade_id {filtro} ORDER BY v.paciente_id, v.ordem",
-        parametros,
-    )
-    return _agrupar((linha[0], linha[1]) for linha in cursor)
-
-
-def _historicos(
-    conexao: sqlcipher3.Connection, paciente_id: int | None
-) -> dict[int, list[HistoricoFamiliar]]:
-    filtro, parametros = _filtro("paciente_id", paciente_id)
-    cursor = conexao.execute(
-        "SELECT paciente_id, parentesco, idade_diagnostico FROM historico_familiar"
-        f" {filtro} ORDER BY paciente_id, ordem",
-        parametros,
-    )
+def _linhas_por(
+    conexao: sqlcipher3.Connection, coluna: str, sql: str, paciente_id: int | None, filtro_em: str
+) -> dict[int, list[sqlcipher3.Row]]:
+    filtro, parametros = _filtro(filtro_em, paciente_id)
     return _agrupar(
-        (pid, HistoricoFamiliar(parentesco=Parentesco(parentesco), idade_diagnostico=idade))
-        for pid, parentesco, idade in cursor
+        (linha[coluna], linha) for linha in conexao.execute(sql.format(filtro), parametros)
     )
 
 
-def _sintomas(conexao: sqlcipher3.Connection, paciente_id: int | None) -> dict[int, list[str]]:
-    filtro, parametros = _filtro("e.paciente_id", paciente_id)
-    cursor = conexao.execute(
-        "SELECT v.exame_id, s.nome FROM exame_sintoma v JOIN sintoma s ON s.id = v.sintoma_id"
-        f" JOIN exame e ON e.id = v.exame_id {filtro} ORDER BY v.exame_id, v.ordem",
-        parametros,
-    )
-    return _agrupar((linha[0], linha[1]) for linha in cursor)
+class _Linhas:
+    """As linhas de um ou de todos os pacientes, agrupadas, ainda sem passar pelo domínio."""
 
-
-def _lesoes(conexao: sqlcipher3.Connection, paciente_id: int | None) -> dict[int, list[Lesao]]:
-    filtro, parametros = _filtro("e.paciente_id", paciente_id)
-    cursor = conexao.execute(
-        f"SELECT l.* FROM lesao l JOIN exame e ON e.id = l.exame_id {filtro}"
-        " ORDER BY l.exame_id, l.ordem",
-        parametros,
-    )
-    return _agrupar((linha["exame_id"], _lesao(linha)) for linha in cursor)
+    def __init__(self, conexao: sqlcipher3.Connection, paciente_id: int | None) -> None:
+        self.comorbidades = _linhas_por(conexao, "paciente_id",
+            "SELECT v.paciente_id, c.nome FROM paciente_comorbidade v"
+            " JOIN comorbidade c ON c.id = v.comorbidade_id {} ORDER BY v.paciente_id, v.ordem",
+            paciente_id, "v.paciente_id")  # fmt: skip
+        self.historicos = _linhas_por(conexao, "paciente_id",
+            "SELECT * FROM historico_familiar {} ORDER BY paciente_id, ordem",
+            paciente_id, "paciente_id")  # fmt: skip
+        self.exames = _linhas_por(
+            conexao,
+            "paciente_id",
+            "SELECT * FROM exame {} ORDER BY paciente_id, ordem",
+            paciente_id,
+            "paciente_id",
+        )
+        self.sintomas = _linhas_por(conexao, "exame_id",
+            "SELECT v.exame_id, s.nome FROM exame_sintoma v JOIN sintoma s ON s.id = v.sintoma_id"
+            " JOIN exame e ON e.id = v.exame_id {} ORDER BY v.exame_id, v.ordem",
+            paciente_id, "e.paciente_id")  # fmt: skip
+        self.lesoes = _linhas_por(conexao, "exame_id",
+            "SELECT l.* FROM lesao l JOIN exame e ON e.id = l.exame_id {}"
+            " ORDER BY l.exame_id, l.ordem", paciente_id, "e.paciente_id")  # fmt: skip
+        self.examinadores = dict(listar_examinadores(conexao))
 
 
 def _lesao(linha: sqlcipher3.Row) -> Lesao:
@@ -180,27 +172,6 @@ def _lesao(linha: sqlcipher3.Row) -> Lesao:
     )
 
 
-def _exames(conexao: sqlcipher3.Connection, paciente_id: int | None) -> dict[int, list[Exame]]:
-    sintomas, lesoes = _sintomas(conexao, paciente_id), _lesoes(conexao, paciente_id)
-    examinadores = {id_: examinador for id_, examinador in listar_examinadores(conexao)}
-    filtro, parametros = _filtro("paciente_id", paciente_id)
-    cursor = conexao.execute(
-        f"SELECT * FROM exame {filtro} ORDER BY paciente_id, ordem", parametros
-    )
-    return _agrupar(
-        (
-            linha["paciente_id"],
-            _exame(
-                linha,
-                examinadores[linha["examinador_id"]],
-                sintomas.get(linha["id"], []),
-                lesoes.get(linha["id"], []),
-            ),
-        )
-        for linha in cursor
-    )
-
-
 def _boston(linha: sqlcipher3.Row) -> Boston | None:
     if linha["boston_direito"] is None:
         return None
@@ -211,53 +182,56 @@ def _boston(linha: sqlcipher3.Row) -> Boston | None:
     )
 
 
-def _exame(
-    linha: sqlcipher3.Row, examinador: Examinador, sintomas: list[str], lesoes: list[Lesao]
-) -> Exame:
+def _exame(linha: sqlcipher3.Row, linhas: _Linhas) -> Exame:
     motivo = linha["motivo_nao_intubacao"]
     return Exame(
         data_exame=date.fromisoformat(linha["data_exame"]),
         indicacao=Indicacao(linha["indicacao"]),
         indicacao_outra=linha["indicacao_outra"],
-        examinador=examinador,
+        examinador=linhas.examinadores[linha["examinador_id"]],
         preparo=_boston(linha),
         intubacao_cecal=bool(linha["intubacao_cecal"]),
         motivo_nao_intubacao=None if motivo is None else MotivoNaoIntubacao(motivo),
         motivo_outro=linha["motivo_outro"],
         tempo_retirada_min=linha["tempo_retirada_min"],
-        sintomas=tuple(sintomas),
-        lesoes=tuple(lesoes),
+        sintomas=tuple(s["nome"] for s in linhas.sintomas.get(linha["id"], [])),
+        lesoes=tuple(_lesao(lesao) for lesao in linhas.lesoes.get(linha["id"], [])),
         observacao=linha["observacao"],
     )
 
 
-def ler_fichas(conexao: sqlcipher3.Connection, paciente_id: int | None = None) -> dict[int, Ficha]:
-    """Todas as fichas por id, ou só a de `paciente_id`."""
-    comorbidades, historicos = (
-        _comorbidades(conexao, paciente_id),
-        _historicos(conexao, paciente_id),
-    )
-    exames = _exames(conexao, paciente_id)
-    filtro, parametros = _filtro("id", paciente_id)
-    cursor = conexao.execute(
-        f"SELECT * FROM paciente {filtro} ORDER BY id",
-        parametros,
-    )
-    fichas = {}
-    for linha in cursor:
-        pid = linha["id"]
-        paciente = Paciente(
-            prontuario=linha["prontuario"],
-            cpf=linha["cpf"],
-            nome=linha["nome"],
-            sexo=Sexo(linha["sexo"]),
-            data_nascimento=date.fromisoformat(linha["data_nascimento"]),
-            comorbidades=tuple(comorbidades.get(pid, [])),
-            historico_familiar=tuple(historicos.get(pid, [])),
+def _ficha(linha: sqlcipher3.Row, linhas: _Linhas) -> Ficha:
+    pid = linha["id"]
+    historico = tuple(
+        HistoricoFamiliar(
+            parentesco=Parentesco(h["parentesco"]), idade_diagnostico=h["idade_diagnostico"]
         )
-        fichas[pid] = Ficha(paciente=paciente, exames=tuple(exames.get(pid, [])))
+        for h in linhas.historicos.get(pid, [])
+    )
+    paciente = Paciente(
+        prontuario=linha["prontuario"],
+        cpf=linha["cpf"],
+        nome=linha["nome"],
+        sexo=Sexo(linha["sexo"]),
+        data_nascimento=date.fromisoformat(linha["data_nascimento"]),
+        comorbidades=tuple(c["nome"] for c in linhas.comorbidades.get(pid, [])),
+        historico_familiar=historico,
+    )
+    exames = tuple(_exame(exame, linhas) for exame in linhas.exames.get(pid, []))
+    return Ficha(paciente=paciente, exames=exames)
+
+
+def ler_fichas_ou_ilegiveis(
+    conexao: sqlcipher3.Connection, paciente_id: int | None = None
+) -> dict[int, Ficha | None]:
+    """Todas as fichas por id, ou só a de `paciente_id`. `None` marca a ficha que o domínio
+    recusa: um valor alterado por fora que passou no CHECK (ex.: displasia incoerente)."""
+    linhas = _Linhas(conexao, paciente_id)
+    filtro, parametros = _filtro("id", paciente_id)
+    fichas: dict[int, Ficha | None] = {}
+    for linha in conexao.execute(f"SELECT * FROM paciente {filtro} ORDER BY id", parametros):
+        try:
+            fichas[linha["id"]] = _ficha(linha, linhas)
+        except ValueError:  # ValidationError, valor fora do Enum, data inválida
+            fichas[linha["id"]] = None
     return fichas
-
-
-def ler_ficha(conexao: sqlcipher3.Connection, paciente_id: int) -> Ficha | None:
-    return ler_fichas(conexao, paciente_id).get(paciente_id)

@@ -12,11 +12,13 @@ from gastroepi.dominio.catalogo import ItemDeCatalogo
 from gastroepi.dominio.exame import Examinador
 from gastroepi.dominio.ficha import Ficha
 from gastroepi.dominio.ficticios import gerar_fichas
-from gastroepi.dominio.listas import UF
+from gastroepi.dominio.listas import UF, Histologia
 from gastroepi.persistencia.catalogos import ExaminadorDivergente
+from gastroepi.persistencia.conexao import BancoCorrompido, ChaveIncorreta
 from gastroepi.persistencia.relogio import Relogio
 from gastroepi.persistencia.repositorio import (
     CpfJaCadastrado,
+    FichaIlegivel,
     PacienteInexistente,
     ProntuarioJaCadastrado,
     Repositorio,
@@ -300,3 +302,111 @@ def test_edicao_depois_de_alteracao_por_fora_deixa_o_rastro(
             Divergencia("paciente", paciente_id, Motivo.HISTORICO_INTERROMPIDO, edicao.id,
                         edicao.evento.momento),
         )  # fmt: skip
+
+
+def ficha_com_adenoma_tubular() -> Ficha:
+    return next(
+        f
+        for f in gerar_fichas(semente=6, quantidade=100)
+        if any(lesao.histologia is Histologia.TUBULAR for e in f.exames for lesao in e.lesoes)
+    )
+
+
+@pytest.fixture
+def banco_com_ficha_ilegivel(repositorio: Repositorio, caminho: Path, chave_de_dados: bytes) -> int:
+    """Displasia incoerente gravada por fora: passa no CHECK, o domínio recusa."""
+    repositorio.cadastrar(ficha(numero=1), usuario="teste")
+    adenoma = com_paciente(ficha_com_adenoma_tubular(), prontuario="A00001", cpf=None)
+    paciente_id = repositorio.cadastrar(adenoma, usuario="teste")
+    repositorio.fechar()
+    alterar_por_fora(
+        caminho, chave_de_dados,
+        "UPDATE lesao SET displasia = 'nao_se_aplica' WHERE histologia = 'adenoma_tubular'"
+        " AND exame_id IN (SELECT id FROM exame WHERE paciente_id = ?)",
+        paciente_id,
+    )  # fmt: skip
+    return paciente_id
+
+
+def test_registro_que_o_dominio_recusa_e_acusado_sem_derrubar_a_verificacao(
+    banco_com_ficha_ilegivel: int, caminho: Path, chave_de_dados: bytes
+) -> None:
+    with Repositorio.abrir(caminho, chave_de_dados) as reaberto:
+        relatorio = reaberto.verificar()
+        entrada = reaberto.listar_auditoria()[-1]
+
+    assert relatorio.dados == (
+        Divergencia("paciente", banco_com_ficha_ilegivel, Motivo.ALTERADO, entrada.id,
+                    entrada.evento.momento),
+    )  # fmt: skip
+
+
+def test_listar_com_registro_ilegivel_levanta_apontando_o_paciente(
+    banco_com_ficha_ilegivel: int, caminho: Path, chave_de_dados: bytes
+) -> None:
+    with Repositorio.abrir(caminho, chave_de_dados) as reaberto:
+        with pytest.raises(FichaIlegivel) as erro:
+            reaberto.listar()
+        with pytest.raises(FichaIlegivel):
+            reaberto.buscar(banco_com_ficha_ilegivel)
+
+    assert erro.value.paciente_id == banco_com_ficha_ilegivel
+
+
+OUTRA_CHAVE = bytes(range(32, 64))
+
+
+def test_trocar_chave_preserva_cadeia_e_dados(
+    repositorio: Repositorio, caminho: Path, chave_de_dados: bytes
+) -> None:
+    for original in gerar_fichas(semente=12, quantidade=10):
+        repositorio.cadastrar(original, usuario="teste")
+    antes = repositorio.listar()
+
+    repositorio.trocar_chave(OUTRA_CHAVE)
+
+    assert repositorio.verificar().ok
+    repositorio.fechar()
+    with pytest.raises(ChaveIncorreta):
+        Repositorio.abrir(caminho, chave_de_dados)
+    with Repositorio.abrir(caminho, OUTRA_CHAVE) as reaberto:
+        assert reaberto.listar() == antes
+        assert reaberto.verificar().ok
+
+
+def test_backup_sai_cifrado_e_abre_com_a_mesma_chave(
+    repositorio: Repositorio, tmp_path: Path, chave_de_dados: bytes
+) -> None:
+    original = ficha_completa()
+    repositorio.cadastrar(original, usuario="teste")
+    destino = tmp_path / "copia.db"
+
+    repositorio.fazer_backup(destino)
+
+    assert original.paciente.nome.encode() not in destino.read_bytes()
+    with Repositorio.abrir(destino, chave_de_dados) as copia:
+        assert list(copia.listar().values()) == [original]
+        assert copia.verificar().ok
+
+
+def test_banco_integro_nao_tem_pagina_corrompida(repositorio: Repositorio) -> None:
+    repositorio.cadastrar(ficha(), usuario="teste")
+
+    assert repositorio.verificar_paginas() == ()
+
+
+def test_byte_trocado_numa_pagina_e_acusado_nas_paginas_e_na_leitura(
+    repositorio: Repositorio, caminho: Path, chave_de_dados: bytes
+) -> None:
+    for original in gerar_fichas(semente=13, quantidade=40):
+        repositorio.cadastrar(original, usuario="teste")
+    repositorio.fechar()  # o último fechamento leva o WAL para o .db
+    bruto = bytearray(caminho.read_bytes())
+    ultima = len(bruto) // 4096
+    bruto[(ultima - 1) * 4096 + 2000] ^= 0x01
+    caminho.write_bytes(bytes(bruto))
+
+    with Repositorio.abrir(caminho, chave_de_dados) as corrompido:
+        assert corrompido.verificar_paginas() == (f"HMAC verification failed for page {ultima}",)
+        with pytest.raises(BancoCorrompido):
+            corrompido.listar_auditoria()

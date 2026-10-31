@@ -28,15 +28,21 @@ from gastroepi.persistencia.catalogos import (
     listar_itens,
     resolver,
 )
-from gastroepi.persistencia.conexao import abrir_conexao, transacao
+from gastroepi.persistencia.conexao import (
+    abrir_conexao,
+    copiar_banco,
+    paginas_corrompidas,
+    traduzir_corrupcao,
+    transacao,
+    trocar_chave,
+)
 from gastroepi.persistencia.estado_atual import estados_atuais
 from gastroepi.persistencia.eventos import ler_chave_de_auditoria, ler_entradas, registrar_evento
 from gastroepi.persistencia.fichas import (
     apagar_ficha,
     atualizar_ficha,
     inserir_ficha,
-    ler_ficha,
-    ler_fichas,
+    ler_fichas_ou_ilegiveis,
 )
 from gastroepi.persistencia.relogio import Relogio, RelogioDoSistema
 from gastroepi.persistencia.schema import migrar
@@ -45,6 +51,12 @@ from gastroepi.persistencia.schema import migrar
 class PacienteInexistente(LookupError):
     def __init__(self, paciente_id: int) -> None:
         super().__init__(f"Paciente {paciente_id} não existe")
+        self.paciente_id = paciente_id
+
+
+class FichaIlegivel(ValueError):
+    def __init__(self, paciente_id: int) -> None:
+        super().__init__(f"Paciente {paciente_id} ilegível")
         self.paciente_id = paciente_id
 
 
@@ -61,16 +73,23 @@ class CpfJaCadastrado(ValueError):
 
 
 class Repositorio:
-    def __init__(self, conexao: sqlcipher3.Connection, relogio: Relogio) -> None:
+    def __init__(self, conexao: sqlcipher3.Connection, chave: bytes, relogio: Relogio) -> None:
         self._conexao = conexao
+        self._chave = chave
         self._relogio = relogio
-        self._chave_de_auditoria = ler_chave_de_auditoria(conexao)
+        with traduzir_corrupcao():
+            self._chave_de_auditoria = ler_chave_de_auditoria(conexao)
 
     @classmethod
     def abrir(cls, caminho: Path, chave: bytes, relogio: Relogio | None = None) -> Self:
         conexao = abrir_conexao(caminho, chave)
-        migrar(conexao)
-        return cls(conexao, relogio or RelogioDoSistema())
+        try:
+            with traduzir_corrupcao():
+                migrar(conexao)
+            return cls(conexao, chave, relogio or RelogioDoSistema())
+        except BaseException:
+            conexao.close()
+            raise
 
     def fechar(self) -> None:
         self._conexao.close()
@@ -112,10 +131,16 @@ class Repositorio:
             self._auditar(usuario, Acao.EXCLUIR, Entidade.PACIENTE, paciente_id, antes, None)
 
     def buscar(self, paciente_id: int) -> Ficha | None:
-        return ler_ficha(self._conexao, paciente_id)
+        with transacao(self._conexao, "DEFERRED"):
+            fichas = ler_fichas_ou_ilegiveis(self._conexao, paciente_id)
+        return self._legiveis(fichas).get(paciente_id)
 
     def listar(self) -> dict[int, Ficha]:
-        return ler_fichas(self._conexao)
+        """Levanta `FichaIlegivel` no primeiro paciente que o domínio recusa: a tela não
+        mostra um registro inválido, e a verificação aponta a entrada contrariada."""
+        with transacao(self._conexao, "DEFERRED"):
+            fichas = ler_fichas_ou_ilegiveis(self._conexao)
+        return self._legiveis(fichas)
 
     # ── Catálogos ─────────────────────────────────────────────────────
 
@@ -127,10 +152,12 @@ class Repositorio:
         return self._adicionar_item("sintoma", item, usuario)
 
     def listar_comorbidades(self) -> tuple[str, ...]:
-        return tuple(nome for _, nome in listar_itens(self._conexao, "comorbidade"))
+        with traduzir_corrupcao():
+            return tuple(nome for _, nome in listar_itens(self._conexao, "comorbidade"))
 
     def listar_sintomas(self) -> tuple[str, ...]:
-        return tuple(nome for _, nome in listar_itens(self._conexao, "sintoma"))
+        with traduzir_corrupcao():
+            return tuple(nome for _, nome in listar_itens(self._conexao, "sintoma"))
 
     def adicionar_examinador(self, examinador: Examinador, usuario: str) -> None:
         with transacao(self._conexao):
@@ -139,16 +166,18 @@ class Repositorio:
                 self._auditar_item(usuario, novo)
 
     def listar_examinadores(self) -> tuple[Examinador, ...]:
-        return tuple(examinador for _, examinador in listar_examinadores(self._conexao))
+        with traduzir_corrupcao():
+            return tuple(examinador for _, examinador in listar_examinadores(self._conexao))
 
     # ── Auditoria ─────────────────────────────────────────────────────
 
     def listar_auditoria(self) -> tuple[EntradaDeAuditoria, ...]:
-        return ler_entradas(self._conexao)
+        with traduzir_corrupcao():
+            return ler_entradas(self._conexao)
 
     def verificar(self) -> RelatorioDeIntegridade:
         """Cadeia e dados lidos na mesma transação de leitura: um retrato coerente."""
-        with transacao(self._conexao):
+        with transacao(self._conexao, "DEFERRED"):
             entradas = ler_entradas(self._conexao)
             atuais = estados_atuais(self._conexao)
         return RelatorioDeIntegridade(
@@ -156,10 +185,36 @@ class Repositorio:
             dados=conferir_dados(entradas, atuais),
         )
 
+    def verificar_paginas(self) -> tuple[str, ...]:
+        """Integridade física: o HMAC de cada página do SQLCipher (ADR-0003)."""
+        return paginas_corrompidas(self._conexao)
+
+    # ── Chave e cópia ─────────────────────────────────────────────────
+
+    def trocar_chave(self, nova: bytes) -> None:
+        """`PRAGMA rekey`. A chave da auditoria mora dentro do banco e não muda: a cadeia
+        continua valendo (ADR-0003, item 5)."""
+        trocar_chave(self._conexao, nova)
+        self._chave = nova
+
+    def fazer_backup(self, destino: Path) -> None:
+        with traduzir_corrupcao():
+            copiar_banco(self._conexao, destino, self._chave)
+
     # ── Internos ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _legiveis(fichas: dict[int, Ficha | None]) -> dict[int, Ficha]:
+        legiveis = {}
+        for paciente_id, ficha in fichas.items():
+            if ficha is None:
+                raise FichaIlegivel(paciente_id)
+            legiveis[paciente_id] = ficha
+        return legiveis
+
     def _ficha_existente(self, paciente_id: int) -> Ficha:
-        ficha = ler_ficha(self._conexao, paciente_id)
+        """Lê dentro da transação de escrita que já está aberta."""
+        ficha = self._legiveis(ler_fichas_ou_ilegiveis(self._conexao, paciente_id)).get(paciente_id)
         if ficha is None:
             raise PacienteInexistente(paciente_id)
         return ficha
