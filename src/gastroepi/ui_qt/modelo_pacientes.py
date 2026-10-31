@@ -1,8 +1,10 @@
 """Modelo da tabela de pacientes, com ordenação e filtro para 10 mil linhas.
 
 As células são montadas uma vez em `carregar`; a ordenação usa a chave guardada no
-`UserRole` (data em ISO, número como número), não o texto mostrado. O filtro pergunta a
-`servicos.pacientes.corresponde_ao_termo`: a regra de busca mora no serviço.
+`UserRole` (data em ISO, número como número), não o texto mostrado. Quem ordena é o modelo,
+com `sorted` em Python: o sort do proxy chamava `data()` 2x por comparação (~260 mil
+travessias C++ → Python em 10 mil linhas, 3,1 s no runner Windows do PR #12). O filtro
+pergunta a `servicos.pacientes.corresponde_ao_termo`: a regra de busca mora no serviço.
 """
 
 from datetime import date
@@ -52,13 +54,41 @@ class ModeloDePacientes(QAbstractTableModel):
         self._ids: list[int] = []
         self._fichas: list[Ficha] = []
         self._celulas: list[tuple[Celula, ...]] = []
+        self._ordem: tuple[int, Qt.SortOrder] | None = None
 
     def carregar(self, fichas: dict[int, Ficha]) -> None:
         self.beginResetModel()
         self._ids = list(fichas)
         self._fichas = list(fichas.values())
         self._celulas = [celulas_da_ficha(f) for f in self._fichas]
+        self._aplicar(self._permutacao())
         self.endResetModel()
+
+    def ordenar(self, coluna: int, ordem: Qt.SortOrder) -> None:
+        """Reordena as linhas pela chave da coluna e lembra a escolha para o `carregar`."""
+        self._ordem = (coluna, ordem)
+        self.layoutAboutToBeChanged.emit()
+        antigos = self.persistentIndexList()
+        permutacao = self._permutacao()
+        nova_linha = {antiga: nova for nova, antiga in enumerate(permutacao)}
+        self._aplicar(permutacao)
+        novos = [self.index(nova_linha[i.row()], i.column()) for i in antigos]
+        self.changePersistentIndexList(antigos, novos)
+        self.layoutChanged.emit()
+
+    def _permutacao(self) -> list[int]:
+        linhas = list(range(len(self._ids)))
+        if self._ordem is None:
+            return linhas
+        coluna, ordem = self._ordem
+        chaves = [celulas[coluna][1] for celulas in self._celulas]
+        decrescente = ordem == Qt.SortOrder.DescendingOrder
+        return sorted(linhas, key=chaves.__getitem__, reverse=decrescente)
+
+    def _aplicar(self, permutacao: list[int]) -> None:
+        self._ids = [self._ids[i] for i in permutacao]
+        self._fichas = [self._fichas[i] for i in permutacao]
+        self._celulas = [self._celulas[i] for i in permutacao]
 
     def rowCount(self, pai: Indice = QModelIndex()) -> int:  # noqa: B008 (assinatura do Qt)
         return 0 if pai.isValid() else len(self._ids)
@@ -94,7 +124,10 @@ class FiltroDePacientes(QSortFilterProxyModel):
         self._modelo = modelo
         self._termo = ""
         self.setSourceModel(modelo)
-        self.setSortRole(Qt.ItemDataRole.UserRole)
+
+    def sort(self, coluna: int, ordem: Qt.SortOrder = Qt.SortOrder.AscendingOrder) -> None:
+        """O clique no cabeçalho chega aqui; quem ordena é o modelo (ver o topo do arquivo)."""
+        self._modelo.ordenar(coluna, ordem)
 
     def definir_termo(self, termo: str) -> None:
         self.beginFilterChange()

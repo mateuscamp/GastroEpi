@@ -6,7 +6,12 @@ from PySide6.QtCore import QModelIndex, Qt
 from pytestqt.qtbot import QtBot
 
 from gastroepi.dominio.ficticios import gerar_fichas
-from gastroepi.ui_qt.modelo_pacientes import COLUNAS, FiltroDePacientes, ModeloDePacientes
+from gastroepi.ui_qt.modelo_pacientes import (
+    COLUNAS,
+    FiltroDePacientes,
+    Indice,
+    ModeloDePacientes,
+)
 
 FICHAS = gerar_fichas(semente=11, quantidade=40)
 
@@ -66,3 +71,37 @@ def test_dez_mil_linhas_carregam_ordenam_e_filtram_rapido(qtbot: QtBot) -> None:
 
     assert time.perf_counter() - inicio < 3.0
     assert 0 < filtro.rowCount() < 10_000
+
+
+class ModeloQueContaPerguntas(ModeloDePacientes):
+    """O modelo de verdade, contando cada vez que o Qt pede uma célula."""
+
+    perguntas = 0
+
+    def data(self, indice: Indice, papel: int = Qt.ItemDataRole.DisplayRole) -> object:
+        self.perguntas += 1
+        return super().data(indice, papel)
+
+
+def test_ordenar_dez_mil_nao_pergunta_ao_python_a_cada_comparacao(qtbot: QtBot) -> None:
+    """CI do PR #12: o sort do proxy chamava `data()` 2x por comparação (~260 mil travessias
+    C++ → Python em 10 mil linhas) e passou de 3 s no runner Windows. Ordenar é do modelo."""
+    modelo = ModeloQueContaPerguntas()
+    modelo.carregar({i: f for i, f in enumerate(gerar_fichas(semente=1, quantidade=10_000))})
+    filtro = FiltroDePacientes(modelo)
+
+    filtro.sort(1, Qt.SortOrder.AscendingOrder)
+
+    assert modelo.perguntas < 1_000
+    nomes = [filtro.ficha(linha).paciente.nome.casefold() for linha in range(10_000)]
+    assert nomes == sorted(nomes)
+
+
+def test_a_ordem_escolhida_vale_depois_de_recarregar(qtbot: QtBot) -> None:
+    modelo, filtro = _modelo()
+    filtro.sort(3, Qt.SortOrder.DescendingOrder)
+
+    modelo.carregar({i * 10: f for i, f in enumerate(FICHAS, start=1)})
+
+    nascimentos = [filtro.ficha(linha).paciente.data_nascimento for linha in range(40)]
+    assert nascimentos == sorted(nascimentos, reverse=True)
