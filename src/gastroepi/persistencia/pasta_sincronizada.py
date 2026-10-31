@@ -39,8 +39,9 @@ _PREFIXOS = {
 }
 # O Windows define estas variáveis com a raiz de cada conta do OneDrive.
 _VARIAVEIS_DO_ONEDRIVE = ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")
-# A raiz do Dropbox tem estes marcadores, mesmo com a pasta renomeada.
-_MARCADORES_DO_DROPBOX = (".dropbox", ".dropbox.cache")
+# A raiz do Dropbox tem este marcador, mesmo com a pasta renomeada. O `.dropbox` não
+# serve: no Linux, `~/.dropbox` é a configuração do cliente e acusaria a home inteira.
+_MARCADORES_DO_DROPBOX = (".dropbox.cache",)
 
 
 def _por_nome(caminho: PurePath) -> str | None:

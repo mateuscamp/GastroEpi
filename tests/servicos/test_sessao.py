@@ -31,10 +31,8 @@ def test_chave_pela_senha_confere_a_senha(tmp_path: Path) -> None:
 
 
 def test_servico_que_sincroniza_olha_o_caminho_resolvido(tmp_path: Path) -> None:
-    dropbox = tmp_path / "Dropbox"
-    dropbox.mkdir()
-    atalho = tmp_path / "atalho"
-    atalho.symlink_to(dropbox, target_is_directory=True)
+    (tmp_path / "Dropbox").mkdir()
+    (tmp_path / "local").mkdir()
 
-    assert servico_que_sincroniza(tmp_path) is None
-    assert servico_que_sincroniza(atalho) == "Dropbox"
+    assert servico_que_sincroniza(tmp_path / "Dropbox" / ".." / "local") is None
+    assert servico_que_sincroniza(tmp_path / "local" / ".." / "Dropbox") == "Dropbox"

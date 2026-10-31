@@ -71,7 +71,7 @@ def test_pastas_comuns_nao_sao_acusadas(caminho: str, sistema: str) -> None:
 
 
 def test_dropbox_com_a_pasta_renomeada_e_achado_pelo_marcador() -> None:
-    marcadores = {r"E:\Arquivos da clinica\.dropbox", "/home/joao/nuvem/.dropbox.cache"}
+    marcadores = {r"E:\Arquivos da clinica\.dropbox.cache", "/home/joao/nuvem/.dropbox.cache"}
 
     def existe(caminho: str) -> bool:
         return caminho in marcadores
@@ -86,3 +86,14 @@ def test_variavel_vazia_do_onedrive_nao_acusa_tudo() -> None:
     ambiente = {"OneDrive": "", "OneDriveConsumer": "  "}
 
     assert servico_de_sincronizacao(r"C:\GastroEpi", "win32", ambiente, nada_existe) is None
+
+
+def test_a_configuracao_do_cliente_dropbox_na_home_nao_acusa_a_home_inteira() -> None:
+    """Regressão (2026-10-31, na máquina do dono): `~/.dropbox` é a pasta de configuração
+    do cliente no Linux, não a raiz sincronizada. A raiz é a que tem `.dropbox.cache`."""
+    marcadores = {"/home/joao/.dropbox", "/home/joao/Dropbox/.dropbox.cache"}
+
+    def existe(caminho: str) -> bool:
+        return caminho in marcadores
+
+    assert servico_de_sincronizacao("/home/joao/gastroepi", "linux", {}, existe) is None

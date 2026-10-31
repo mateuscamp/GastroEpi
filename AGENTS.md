@@ -43,6 +43,8 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 - Nunca gravar em disco a chave de dados, a senha ou a recovery key. O `gastroepi.chave` só guarda a chave embrulhada.
 - Testes e fixtures usam só pacientes do gerador de fictícios com semente. Nunca dado real.
 - Migração de schema: função idempotente + teste com banco da versão anterior.
+- Nenhum backup ganha o nome final sem passar na conferência. Nenhum código apaga o banco estragado (ADR-0005).
+- Sessão somente leitura nunca escreve nem copia. O banco em uso nunca fica em pasta sincronizada.
 
 ## Ciclo de mudança (TDD)
 
@@ -76,7 +78,7 @@ src/gastroepi/
   dominio/       Paciente, HistoricoFamiliar, CPF, datas, validação, gerador de fictícios
   cofre/         Argon2id, chave de dados, gastroepi.chave, recovery key
   auditoria/     elo HMAC, verificação da cadeia e dos dados
-  persistencia/  SQLCipher: schema, migrações, repositório, backup
+  persistencia/  SQLCipher: schema, migrações, repositório, backup conferido, rotação, trava
   estatistica/   contingência, Wilson, Fleiss, Cochran-Armitage, Mantel-Haenszel, qualidade, descritiva
   exportacao/    CSV pt-BR com proteção contra injeção
   servicos/      casos de uso: a única porta das cascas para o núcleo

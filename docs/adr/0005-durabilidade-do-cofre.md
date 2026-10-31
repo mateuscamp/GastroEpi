@@ -110,7 +110,8 @@ expõe os casos de uso, e a casca (Fase 5) só liga o timer e mostra as ofertas 
      `Dropbox (…)`, `iCloudDrive`, `iCloud Drive`, `Mobile Documents`;
    - estar sob `%OneDrive%`, `%OneDriveConsumer%` ou `%OneDriveCommercial%` (Windows);
    - estar sob um montador de nuvem do Linux: `gvfs/google-drive:…` ou `gvfs/onedrive:…`;
-   - um ancestral com `.dropbox` ou `.dropbox.cache` (Dropbox com a pasta renomeada).
+   - um ancestral com `.dropbox.cache` (Dropbox com a pasta renomeada). O `.dropbox` não
+     serve: no Linux, `~/.dropbox` é a configuração do cliente e acusaria a home inteira.
 9. **Destino externo opcional** (pendrive ou pasta do Drive). Fica gravado no `metadados` do
    banco cifrado, junto com o momento da última cópia externa. Depois de cada backup
    automático, a cópia mais nova vai para `<destino>/GastroEpi-backups/`: um temporário,
@@ -137,10 +138,13 @@ expõe os casos de uso, e a casca (Fase 5) só liga o timer e mostra as ofertas 
 - Com destino externo, o dado sobrevive ao disco e à máquina, sem o banco em uso sair dela.
 
 **Perde:**
-- A abertura fica mais lenta: o `quick_check` lê o arquivo inteiro (medido na Fase 4).
+- A abertura fica mais lenta: o `quick_check` lê o arquivo inteiro (0,22 s com o Argon2id,
+  em 10 mil fictícios).
 - Cada backup abre a cópia mais uma vez para conferir.
-- A heurística de pasta sincronizada pode recusar uma pasta só com nome parecido
-  (ex.: `C:\Projetos\Dropbox antigo`). O erro diz qual nome casou.
+- A heurística de pasta sincronizada pode recusar uma pasta cujo nome é exatamente o de um
+  serviço (ex.: `C:\Projetos\Dropbox\`, sem cliente instalado). O erro diz qual serviço.
+- Uma cópia que está no Drive não abre lá: o desbloqueio recusa a pasta sincronizada. Para
+  restaurar dela, a pasta da cópia sai do Drive primeiro.
 - O backup oferecido para restaurar tem de estar na chave atual. Cópias de antes de um rekey
   só abrem manualmente, com a recovery key antiga e a senha da época.
 - Um backup abre com a senha que valia quando ele foi feito: o `gastroepi.chave` vai junto
@@ -173,7 +177,7 @@ expõe os casos de uso, e a casca (Fase 5) só liga o timer e mostra as ofertas 
 | ★ Destino externo: só cópia conferida, sem recovery key | Teste: a cópia externa abre e verifica; os bytes do destino não contêm a recovery key | CI | Cópia não abre ou a recovery key aparece |
 | Destino na nuvem exige frase longa | Teste: destino sincronizado + senha curta → recusa; frase de 4 palavras → aceita; pendrive aceita senha curta | CI | Regra invertida |
 | Aviso de cópia externa atrasada | Teste com relógio falso: 7 dias não avisa; 7 dias e 1 s avisa; nunca copiado avisa; sem destino não avisa | CI | Avisa errado |
-| Tempo da abertura | `ferramentas/medir_listagem.py` mede a abertura com `quick_check` em 10 mil fictícios | Manual, a cada fase | Abertura > 2 s no Linux de referência |
+| Tempo da abertura | `ferramentas/medir_listagem.py` mede a abertura com `quick_check` em 10 mil fictícios | Manual, a cada fase | Abertura > 2 s no Linux de referência (medido: 0,22 s) |
 
 Regras derivadas no `AGENTS.md`:
 - "Nenhum backup ganha o nome final sem passar na conferência. Nenhum código apaga o banco
@@ -184,3 +188,22 @@ Regras derivadas no `AGENTS.md`:
 
 Autor: Mateus Campelo · Criado em: 2026-10-31 · Aprovado em: 2026-10-31
 Estende: 0002, 0003
+
+**Detalhamento da implementação (2026-10-31, Fase 4):**
+- Módulos: `persistencia/backups.py` (gravar, listar, oferta, restaurar), `rotacao.py` (puro),
+  `trava.py`, `pasta_sincronizada.py` (puro); `servicos/sessao.py` (a `Sessao` saiu de
+  `acesso` para `durabilidade` e `destino_externo` não importarem `acesso`),
+  `durabilidade.py` e `destino_externo.py`.
+- O `quick_check` do SQLCipher 4.19 levanta `DatabaseError` ("database disk image is
+  malformed") na página com HMAC errado; não devolve linha. Os dois casos reprovam.
+- A conferência abre a cópia com `mode=ro` (URI). Abrir pelo caminho normal gravaria o modo
+  WAL no cabeçalho da cópia; um pendrive ou o Drive veriam a cópia mudar depois de conferida.
+- Restaurar guarda o banco estragado por link (cópia, se o sistema de arquivos não tem link).
+  Assim o cofre nunca fica sem `gastroepi.db`: sem ele, o app ofereceria criar um cofre novo
+  por cima do `gastroepi.chave`.
+- Preferências (destino externo e última cópia externa) ficam em `metadados`, com o prefixo
+  `preferencia.`, fora da auditoria: não são dado clínico.
+- Achado na máquina do dono: `~/.dropbox` é a configuração do cliente no Linux, e o marcador
+  `.dropbox` acusava a home inteira. O marcador ficou só `.dropbox.cache`, com teste de regressão.
+- Medição (`ferramentas/medir_listagem.py 10000 .`, Linux, NVMe, máquina com outras sessões
+  rodando): abrir com Argon2id + `quick_check` 0,22 s; backup conferido + rotação 0,39 s.
