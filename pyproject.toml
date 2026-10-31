@@ -47,6 +47,8 @@ sequence = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Os testes importam ajudantes de tests/ (ex.: tests.estatistica.referencias).
+pythonpath = ["."]
 # Princípio I: a suíte inteira roda sem rede; um teste que abra socket falha.
 addopts = ["--disable-socket", "--strict-markers", "-q"]
 markers = [
@@ -66,7 +68,8 @@ python_version = "3.13"
 strict = true
 files = ["src", "tests", "ferramentas"]
 # sqlcipher3 não publica tipos; os dele ficam em typings/ (API do sqlite3).
-mypy_path = "typings"
+mypy_path = "typings:src"
+explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
