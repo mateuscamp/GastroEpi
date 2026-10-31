@@ -29,6 +29,12 @@ jobs:
           enable-cache: true
       - name: Instalar (Python da .python-version, versões do uv.lock)
         run: uv sync --locked
+      # O Qt (Fase 5) carrega libEGL e afins mesmo em offscreen; o runner Ubuntu não as traz.
+      - name: Bibliotecas de sistema do Qt (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
       # ruff, mypy --strict, import-linter, pytest sem rede com cobertura ≥ 90%.
       # Os testes da casca (Fase 5) salvam a captura de cada tela em GASTROEPI_CAPTURAS.
       - name: Checagem completa
