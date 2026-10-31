@@ -161,8 +161,8 @@ Plano original da fase:
 
 ### Fase 2 — Cofre, persistência e auditoria
 
-**Estado em 2026-10-31:** feita e verde localmente (Linux): `uv run poe check` com 415
-testes em ~5 s e 100% dos ramos no pacote inteiro. Falta ver o CI em Ubuntu e Windows.
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #8): `uv run poe check`
+com 415 testes em ~5 s e 100% dos ramos no pacote inteiro.
 
 - Primeiro vermelho, o Cenário 3, visto na asserção: `assert () == (Divergencia(...),)`.
 - `tests/arquitetura/test_adr_0003.py` tem um teste por linha da Governança do ADR-0003.
