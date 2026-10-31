@@ -50,9 +50,16 @@ def _pragma_de_chave(nome: str, chave: bytes) -> str:
     return f"PRAGMA {nome} = \"x'{chave.hex()}'\""
 
 
-def abrir_conexao(caminho: Path, chave: bytes) -> sqlcipher3.Connection:
+class BancoSomenteLeitura(PermissionError):
+    """O banco não passou na checagem da abertura e está protegido de escrita (ADR-0005)."""
+
+    def __init__(self) -> None:
+        super().__init__("O banco está em somente leitura: restaure um backup para editar")
+
+
+def _conectar(alvo: str, chave: bytes, *, uri: bool = False) -> sqlcipher3.Connection:
     _conferir_tamanho(chave)
-    conexao = sqlcipher3.connect(str(caminho), isolation_level=None)
+    conexao = sqlcipher3.connect(alvo, isolation_level=None, uri=uri)
     conexao.execute(_pragma_de_chave("key", chave))
     conexao.execute("PRAGMA cipher_log_level = NONE")
     conexao.execute("PRAGMA temp_store = MEMORY")
@@ -62,10 +69,52 @@ def abrir_conexao(caminho: Path, chave: bytes) -> sqlcipher3.Connection:
         conexao.close()
         raise ChaveIncorreta from None
     conexao.row_factory = sqlcipher3.Row
+    return conexao
+
+
+def abrir_conexao(caminho: Path, chave: bytes) -> sqlcipher3.Connection:
+    conexao = _conectar(str(caminho), chave)
     conexao.execute("PRAGMA foreign_keys = ON")
     conexao.execute("PRAGMA journal_mode = WAL")
     conexao.execute(f"PRAGMA busy_timeout = {ESPERA_POR_TRAVA_MS}")
     return conexao
+
+
+def abrir_para_conferir(caminho: Path, chave: bytes) -> sqlcipher3.Connection:
+    """Abre só para ler (`mode=ro`): conferir uma cópia não pode mudar um byte dela, nem
+    o modo de journal que `abrir_conexao` gravaria no cabeçalho."""
+    return _conectar(f"{caminho.resolve().as_uri()}?mode=ro", chave, uri=True)
+
+
+def passa_no_quick_check(conexao: sqlcipher3.Connection) -> bool:
+    """`PRAGMA quick_check` lê todas as páginas, e o SQLCipher confere o HMAC de cada uma.
+    Página com HMAC errado levanta `DatabaseError` em vez de virar uma linha do resultado."""
+    try:
+        linhas = conexao.execute("PRAGMA quick_check").fetchall()
+    except sqlcipher3.DatabaseError:
+        return False
+    return [linha[0] for linha in linhas] == ["ok"]
+
+
+def copia_integra(caminho: Path, chave: bytes) -> bool:
+    """A conferência de um backup (ADR-0005, item 4): `integrity_check` = ok e nenhuma
+    página no `cipher_integrity_check`. Chave errada ou arquivo ilegível também reprovam."""
+    try:
+        conexao = abrir_para_conferir(caminho, chave)
+    except (ChaveIncorreta, sqlcipher3.DatabaseError):
+        return False
+    try:
+        linhas = [linha[0] for linha in conexao.execute("PRAGMA integrity_check")]
+        return linhas == ["ok"] and not paginas_corrompidas(conexao)
+    except sqlcipher3.DatabaseError:
+        return False
+    finally:
+        conexao.close()
+
+
+def proibir_escrita(conexao: sqlcipher3.Connection) -> None:
+    """Segunda linha do somente leitura: o repositório já recusa antes de chegar aqui."""
+    conexao.execute("PRAGMA query_only = ON")
 
 
 @contextmanager
@@ -116,5 +165,7 @@ def copiar_banco(conexao: sqlcipher3.Connection, destino: Path, chave: bytes) ->
     copia = abrir_conexao(destino, chave)
     try:
         conexao.backup(copia)
+        # Um arquivo só, sem -wal: a cópia vai inteira para um pendrive ou o Drive (ADR-0005).
+        copia.execute("PRAGMA journal_mode = DELETE")
     finally:
         copia.close()

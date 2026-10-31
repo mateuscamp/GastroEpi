@@ -62,6 +62,8 @@ source = ["gastroepi"]
 [tool.coverage.report]
 fail_under = 90
 skip_empty = true
+# O ramo do Windows (msvcrt) não roda no Linux, e vice-versa; o CI roda os dois sistemas.
+exclude_also = ['if sys\.platform == "win32":']
 
 [tool.mypy]
 python_version = "3.13"

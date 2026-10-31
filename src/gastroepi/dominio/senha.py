@@ -26,3 +26,15 @@ def conferir_nova_senha(senha: str, confirmacao: str) -> None:
     if len(unicodedata.normalize("NFC", senha)) < SENHA_MINIMA:
         mensagem = f"A senha precisa ter pelo menos {SENHA_MINIMA} caracteres"
         raise SenhaCurta(mensagem, campo="senha")
+
+
+# ADR-0005, item 9: com cópias na nuvem, o Argon2id só atrasa a adivinhação.
+PALAVRAS_DA_FRASE = 4
+FRASE_MINIMA = 20
+
+
+def e_frase_longa(senha: str) -> bool:
+    """Pelo menos 4 palavras e 20 caracteres (em NFC), a senha exigida para copiar o cofre
+    para uma pasta sincronizada."""
+    normalizada = unicodedata.normalize("NFC", senha)
+    return len(normalizada.split()) >= PALAVRAS_DA_FRASE and len(normalizada) >= FRASE_MINIMA

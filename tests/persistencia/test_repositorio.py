@@ -1,6 +1,7 @@
 """Repositório: cada mutação e o seu evento de auditoria na mesma transação."""
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,13 @@ from gastroepi.dominio.ficha import Ficha
 from gastroepi.dominio.ficticios import gerar_fichas
 from gastroepi.dominio.listas import UF, Histologia
 from gastroepi.persistencia.catalogos import ExaminadorDivergente
-from gastroepi.persistencia.conexao import BancoCorrompido, ChaveIncorreta
-from gastroepi.persistencia.relogio import Relogio
+from gastroepi.persistencia.conexao import (
+    BancoCorrompido,
+    BancoSomenteLeitura,
+    ChaveIncorreta,
+    abrir_conexao,
+)
+from gastroepi.persistencia.relogio import Relogio, RelogioDoSistema
 from gastroepi.persistencia.repositorio import (
     CpfJaCadastrado,
     FichaIlegivel,
@@ -24,6 +30,8 @@ from gastroepi.persistencia.repositorio import (
     Repositorio,
 )
 from gastroepi.persistencia.schema import VERSAO_DO_SCHEMA, BancoMaisNovoQueOApp
+
+MOMENTO = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -381,9 +389,10 @@ def test_backup_sai_cifrado_e_abre_com_a_mesma_chave(
 ) -> None:
     original = ficha_completa()
     repositorio.cadastrar(original, usuario="teste")
-    destino = tmp_path / "copia.db"
+    arquivo_de_chave = tmp_path / "gastroepi.chave"
+    arquivo_de_chave.write_bytes(b"{}")
 
-    repositorio.fazer_backup(destino)
+    destino = repositorio.fazer_backup(tmp_path / "backups", arquivo_de_chave, MOMENTO).banco
 
     assert original.paciente.nome.encode() not in destino.read_bytes()
     with Repositorio.abrir(destino, chave_de_dados) as copia:
@@ -428,3 +437,70 @@ def test_abrir_banco_de_schema_mais_novo_recusa_e_fecha_a_conexao(
     # Conexão esquecida aberta manteria o -wal; fechada, o arquivo some (e no Windows
     # a pasta temporária pode ser apagada).
     assert not caminho.with_name(caminho.name + "-wal").exists()
+
+
+# ── Somente leitura, marca de alteração e preferências (ADR-0005) ─────
+
+TAMANHO_DA_PAGINA = 4096
+
+
+def corromper_os_metadados(caminho: Path, chave: bytes) -> None:
+    """Troca um byte da página raiz de `metadados`: o esquema abre, a chave da auditoria não."""
+    conexao = abrir_conexao(caminho, chave)
+    sql = "SELECT rootpage FROM sqlite_master WHERE name = 'metadados'"
+    raiz: int = conexao.execute(sql).fetchone()[0]
+    conexao.close()
+    bruto = bytearray(caminho.read_bytes())
+    bruto[(raiz - 1) * TAMANHO_DA_PAGINA + 100] ^= 0xFF
+    caminho.write_bytes(bytes(bruto))
+
+
+def test_banco_que_nao_passa_no_quick_check_abre_somente_leitura(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    with Repositorio.abrir(caminho, chave_de_dados) as repositorio:
+        for numero in range(1, 30):
+            repositorio.cadastrar(ficha(numero), usuario="teste")
+    corromper_os_metadados(caminho, chave_de_dados)
+
+    with Repositorio.abrir(caminho, chave_de_dados) as repositorio:
+        assert repositorio.somente_leitura
+        with pytest.raises(BancoCorrompido):
+            repositorio.verificar()
+        with pytest.raises(BancoSomenteLeitura):
+            repositorio.trocar_chave(bytes(32))
+        with pytest.raises(BancoSomenteLeitura):
+            repositorio.gravar_preferencia("destino_externo", "E:\\")
+
+
+def test_metadados_ilegiveis_num_banco_para_escrita_levantam(
+    caminho: Path, chave_de_dados: bytes
+) -> None:
+    Repositorio.abrir(caminho, chave_de_dados).fechar()
+    corromper_os_metadados(caminho, chave_de_dados)
+    conexao = abrir_conexao(caminho, chave_de_dados)
+
+    with pytest.raises(BancoCorrompido):
+        Repositorio(conexao, chave_de_dados, RelogioDoSistema())
+    conexao.close()
+
+
+def test_marca_de_alteracao_sobe_a_cada_mutacao(repositorio: Repositorio) -> None:
+    antes = repositorio.marca_de_alteracao()
+    paciente_id = repositorio.cadastrar(ficha(), usuario="teste")
+    depois_de_cadastrar = repositorio.marca_de_alteracao()
+    repositorio.excluir(paciente_id, usuario="teste")
+
+    assert antes == 0
+    assert antes < depois_de_cadastrar < repositorio.marca_de_alteracao()
+
+
+def test_preferencia_grava_le_e_apaga(repositorio: Repositorio, caminho: Path) -> None:
+    assert repositorio.ler_preferencia("destino_externo") is None
+    repositorio.gravar_preferencia("destino_externo", "E:\\Cópias")
+    repositorio.gravar_preferencia("destino_externo", "F:\\Cópias")
+
+    assert repositorio.ler_preferencia("destino_externo") == "F:\\Cópias"
+    repositorio.gravar_preferencia("destino_externo", None)
+    assert repositorio.ler_preferencia("destino_externo") is None
+    assert repositorio.marca_de_alteracao() == 0  # preferência não é dado clínico

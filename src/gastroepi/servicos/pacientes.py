@@ -14,7 +14,7 @@ from gastroepi.persistencia.repositorio import (
     PacienteInexistente,
     ProntuarioJaCadastrado,
 )
-from gastroepi.servicos.acesso import Sessao, repositorio_de
+from gastroepi.servicos.sessao import Sessao, repositorio_de
 
 __all__ = [
     "CpfJaCadastrado",

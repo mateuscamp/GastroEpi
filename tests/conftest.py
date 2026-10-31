@@ -24,6 +24,19 @@ class RelogioFalso:
         return instante
 
 
+class RelogioManual:
+    """Relógio parado: só anda quando o teste manda (backup a cada 15 min, ADR-0005)."""
+
+    def __init__(self, inicio: datetime = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)) -> None:
+        self._agora = inicio
+
+    def agora(self) -> datetime:
+        return self._agora
+
+    def avancar(self, intervalo: timedelta) -> None:
+        self._agora += intervalo
+
+
 @pytest.fixture
 def relogio() -> RelogioFalso:
     return RelogioFalso()

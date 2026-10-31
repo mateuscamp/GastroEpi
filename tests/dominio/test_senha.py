@@ -2,7 +2,7 @@
 
 import pytest
 
-from gastroepi.dominio.senha import SenhaCurta, SenhasDiferentes, conferir_nova_senha
+from gastroepi.dominio.senha import SenhaCurta, SenhasDiferentes, conferir_nova_senha, e_frase_longa
 
 
 def test_senha_igual_a_confirmacao_e_longa_passa() -> None:
@@ -26,3 +26,10 @@ def test_tamanho_conta_caracteres_e_nao_bytes_nem_acentos_decompostos() -> None:
     decomposta = "ção" + "abcd"  # 7 caracteres em NFC, 9 pontos de código
     with pytest.raises(SenhaCurta):
         conferir_nova_senha(decomposta, decomposta)
+
+
+def test_frase_longa_tem_4_palavras_e_20_caracteres() -> None:
+    assert e_frase_longa("cavalo bateria grampo correto")
+    assert not e_frase_longa("senha muito forte!")  # 3 palavras
+    assert not e_frase_longa("a b c d e f")  # 6 palavras, 11 caracteres
+    assert e_frase_longa("café  pão   manteiga leite")  # espaços repetidos não contam

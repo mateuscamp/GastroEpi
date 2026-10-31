@@ -1,4 +1,4 @@
-"""Verificar integridade (arquivo, cadeia e dados) e backup com o arquivo de chave."""
+"""Verificar integridade: arquivo, cadeia e dados."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import sqlcipher3
 from gastroepi.cofre.recovery_key import ler_recovery_key
 from gastroepi.dominio.ficticios import gerar_fichas
 from gastroepi.servicos import integridade, pacientes
-from gastroepi.servicos.acesso import NOME_DA_CHAVE, NOME_DO_BANCO, criar_cofre, desbloquear
+from gastroepi.servicos.acesso import NOME_DO_BANCO, criar_cofre, desbloquear
 
 SENHA = "frase longa de teste"
 
@@ -61,17 +61,3 @@ def test_pagina_corrompida_reprova_sem_tentar_ler_os_dados(tmp_path: Path) -> No
     assert not verificacao.ok
     assert len(verificacao.paginas_corrompidas) == 1
     assert verificacao.auditoria is None
-
-
-def test_backup_leva_o_banco_e_o_arquivo_de_chave_e_abre_com_a_mesma_senha(tmp_path: Path) -> None:
-    cofre_com_fichas(tmp_path / "cofre")
-    destino = tmp_path / "backup"
-
-    with desbloquear(tmp_path / "cofre", SENHA) as sessao:
-        integridade.fazer_backup(sessao, destino)
-        originais = pacientes.listar(sessao)
-
-    assert {p.name for p in destino.iterdir()} == {NOME_DO_BANCO, NOME_DA_CHAVE}
-    with desbloquear(destino, SENHA) as copia:
-        assert pacientes.listar(copia) == originais
-        assert integridade.verificar(copia).ok
