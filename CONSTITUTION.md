@@ -3,49 +3,36 @@
 ## Core Principles
 
 ### I. Local Sovereignty (Soberania Local)
-Every feature must function 100% offline, executing locally without any external network dependency, tracking, or telemetry. All user data, databases, and logs are kept strictly on the local filesystem, ensuring medical data privacy and compliance with LGPD.
+Every feature must function 100% offline, executing locally without any external network dependency, tracking, or telemetry. The application opens no network socket, not even on 127.0.0.1 (ADR-0002). All user data, databases, and logs are kept strictly on the local filesystem, ensuring medical data privacy and compliance with LGPD.
 
 ### II. Security-in-Depth (Segurança em Profundidade)
-All sensitive patient data (CPF, name/nome) and histological findings (laudos) must be encrypted at rest using AES-256-GCM, ensuring patient privacy and LGPD compliance (supporting Principle I). The encryption key must be derived from a user-provided master password via the KDF Argon2id. No plaintext passwords or keys may be stored on the disk.
+The entire database file is encrypted at rest with SQLCipher 4, including every patient field, the catalogs, the audit table, the WAL, and every backup (ADR-0003). The SQLCipher key is a random 256-bit data key, never derived from the password. It is stored on disk only wrapped (AES-256-GCM) by a key derived from the user's master password via the KDF Argon2id (t=3, m=64 MiB, p=4). The recovery key is the data key itself, shown once and never written to disk. No plaintext passwords or keys may be stored on the disk. The only plaintext exit is a CSV export started by the user.
 
 ### III. Verifiable Append-Only Audit (Auditoria Append-Only Verificável)
-All CRUD operations on clinical data must be logged to a database-enforced append-only audit table. Triggers at the database level must block manual updates or deletions. The audit log must use a cryptographic HMAC-SHA256 hash-chain (linked to the vault key), while supporting legacy SHA-256 hash-chain entries for backward compatibility, allowing instant, authenticated integrity verification.
+All CRUD operations on clinical data must be logged, in the same transaction as the change, to a database-enforced append-only audit table. Triggers at the database level must block manual updates or deletions. The audit log is an HMAC-SHA256 hash-chain keyed by a dedicated audit key stored inside the encrypted database, so that a data-key rotation does not break the chain. It allows instant, authenticated integrity verification of both the chain and the current patient states.
 
 ### IV. Mathematical & Statistical Fidelity (Fidelidade Estatística)
-All calculations in the epidemiological module (StatCalc) must use high-precision numerical algorithms (`f64`). Statistical routines (Cochran-Armitage trend test, Wilson score intervals, and Fleiss sample size formulas) must match benchmark scientific results and handle mathematical boundaries gracefully (no crash on divisions by zero).
+All calculations in the epidemiological module (`estatistica`) use 64-bit floating point. Every public statistical routine (Cochran-Armitage trend test, Wilson score intervals, Fleiss sample size, contingency tables, Mantel-Haenszel, quality indicators) must have a test against a cited reference value (R, Epi Info, or a published article) and must handle mathematical boundaries gracefully (no crash on divisions by zero).
 
-### V. Strict Frontend Validation (Validação Rigorosa)
-Input validation must occur at the boundaries of the UI. Types must be strictly coerced (using Zod), preventing implicit conversions (e.g., rejecting boolean true/false values for integer fields). CPFs must be sanitized and verified for digits validity. Dates must be parsed and stored in ISO 8601 format (`YYYY-MM-DD`).
+### V. Strict Domain Validation (Validação Rigorosa)
+Input validation happens once, in the domain layer (`dominio`, strict pydantic), and every shell (desktop, CLI) uses it; no shell re-implements a rule. Types must be strictly coerced, preventing implicit conversions (e.g., rejecting boolean true/false values for integer fields). CPFs must be sanitized and verified for digits validity. Dates are entered as `dd/mm/aaaa` and stored in ISO 8601 format (`YYYY-MM-DD`).
 
 ---
 
 ## Technical Constraints
 
-- **Backend Stack:** Rust (for SQLite, encryption, audit verification, and stat calculations).
-- **Frontend Stack:** TypeScript + React + Tailwind CSS (compiled via Tauri).
-- **Communication:** Strongly typed Tauri IPC (Commands) without local WebSockets.
-- **Database:** SQLite (`rusqlite`) running in WAL mode with robust busy timeouts.
+- **Language:** Python 3.13, managed with `uv` (ADR-0002).
+- **Architecture:** one executable and one database; a pure core (`dominio`, `cofre`, `auditoria`, `persistencia`, `estatistica`, `exportacao`, `servicos`) and two shells (`ui_qt`, `cli`). Boundaries are enforced by import-linter in CI.
+- **Desktop shell:** PySide6 (Qt), single process, no local server.
+- **Database:** SQLite through SQLCipher 4 (`sqlcipher3`), opened only by `persistencia`, in WAL mode with busy timeouts.
+- **Legacy:** the Tauri v0.1.16 code (`src-tauri/`, TypeScript frontend) is a frozen oracle until parity, then removed (tag `v0.1.16` preserves it).
 
 ---
 
 ## Session Startup Protocol (Agent)
 
-> **MANDATORY:** At the start of every new session working on this project, the agent MUST run the following check **once** before any other task:
-
-```bash
-cd src-tauri && cargo audit 2>&1 | grep -E "^(Crate|Warning|Title|ID):" | grep -A3 "gtk\|gdk\|atk"
-```
-
-**If the output shows NO results** (i.e., the GTK3 binding warnings for `gtk`, `gdk`, `atk`, `gdkwayland`, `gdkx11` are gone), it means Tauri has migrated to GTK4. In that case:
-
-```bash
-cd src-tauri && cargo update
-```
-
-Then commit with message: `chore(deps): cargo update — GTK4 bindings now available`.
-
-**If the warnings are still present**, skip silently and proceed with the session normally. Do NOT repeat this check mid-session.
+No startup check. Commands and rules live in `AGENTS.md`. The former `cargo audit` check for GTK4 bindings was removed with the move to Python; dependency vulnerabilities are checked by `pip-audit` in CI.
 
 ---
 
-**Version**: 1.3.0 | **Ratified**: 2026-06-04
+**Version**: 2.0.0 | **Ratified**: 2026-06-04 | **Amended**: 2026-10-31 (ADR-0002, ADR-0003)

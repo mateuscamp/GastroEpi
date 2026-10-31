@@ -60,7 +60,7 @@ chave `gastroepi.chave` passa a fazer parte do dado.
    usaria a mesma chave e quebraria a busca e a ordenação.
 7. **Backup:** API de backup entre duas conexões SQLCipher com a mesma chave, então o
    backup sai cifrado. O `gastroepi.chave` é copiado junto. Rotação e verificação ficam
-   no ADR-0004.
+   no ADR-0005.
 8. **Saída em claro:** a única é a exportação CSV, iniciada pelo usuário e com aviso na tela.
 
 ## Consequências

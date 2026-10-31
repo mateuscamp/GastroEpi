@@ -53,8 +53,8 @@ local, e a casca Qt não abre nenhuma porta enquanto a chave está em memória.
 
 O código Rust/TS fica congelado como oráculo até a paridade e sai num commit único
 no corte; a tag `v0.1.16` o preserva. Ainda não decidido: como cifrar em repouso
-(ADR-0003), como garantir a durabilidade (ADR-0004) e qual empacotador usar
-(ADR-0005). Cada um é decidido antes do código da sua fase.
+(ADR-0003), como garantir a durabilidade (ADR-0005) e qual empacotador usar
+(ADR-0006). O modelo de dados estruturado é o ADR-0004. Cada um é decidido antes do código da sua fase.
 
 ## Consequências
 
@@ -93,7 +93,7 @@ trocada sem mexer no núcleo.
 | ★ Adulteração detectada (Cenário 3) | Teste: altera 1 linha por `sqlite3` externo → verificação | CI | Não acusa a primeira entrada afetada |
 | Legibilidade | `tests/arquitetura`: arquivo ≤ 400 linhas, função ≤ 40 | CI + pre-commit | Qualquer arquivo ou função acima |
 | Tipos | `mypy --strict src/` | CI | Qualquer erro |
-| Oráculo congelado | CI compara o PR com `main` em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | CI | Mudança fora de `src-tauri/examples/oraculo.rs` |
+| Oráculo congelado | CI compara o PR com `main` em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | CI | Qualquer mudança (o oráculo mora em `ferramentas/oraculo_rust/`) |
 | Roda no Windows | Job `windows-latest`: `uv run pytest` (a partir da Fase 6, build + `--smoke`) | CI | Teste falha; instalador > 250 MB |
 
 Regra derivada no `AGENTS.md`: seção "Fronteiras (ADR-0002)".

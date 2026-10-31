@@ -4,21 +4,21 @@ App desktop offline para registro de colonoscopia e epidemiologia de câncer col
 Em reescrita de Tauri (Rust + TS) para Python: ADR-0002 (Aceito) e `docs/PLANO-REESCRITA-PYTHON.md`.
 Arquitetura: monólito modular · Quantum: 1 executável, 1 banco. ADRs em `docs/adr/`. Princípios em `CONSTITUTION.md` (prevalecem).
 
-## Comandos (criados na Fase 0)
+## Comandos
 
 - Setup: `uv sync`
 - Testes: `uv run pytest`. Roda headless (`QT_QPA_PLATFORM=offscreen`), sem rede e sem senha real.
-- Checagem completa: `uv run poe check` (ruff, mypy --strict, lint-imports, pytest).
-- Rodar: `uv run gastroepi` · com fictícios: `uv run gastroepi demo`
+- Checagem completa: `uv run poe check` (ruff, mypy --strict, lint-imports, pytest com cobertura ≥ 90%).
+- Rodar: `uv run gastroepi` e `uv run gastroepi demo` chegam na Fase 5.
 
 Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 
 ## Transição
 
 - Oráculo congelado da v0.1.16, não editar: `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json`.
-  Única exceção: `src-tauri/examples/oraculo.rs`, que gera `tests/fixtures/oraculo_rust_v0_1_16.json`.
+- Fixtures em `tests/fixtures/`: `oraculo_rust_v0_1_16.json5` (gerado por `ferramentas/oraculo_rust/`) e
+  `vetores_validacao_v0_1_16.json` (gerado do `src/validation.ts` no Node). Nunca editar à mão.
 - Se Python e oráculo divergirem, decide o valor de referência citado (R, Epi Info, artigo). Registrar a divergência no commit.
-- O protocolo de `cargo audit` da CONSTITUTION vale só para trabalho em `src-tauri/`, que está congelado.
 
 ## Fronteiras (ADR-0002)
 
@@ -31,6 +31,7 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 - Só `persistencia` importa `sqlcipher3` (ADR-0003). O banco nunca é aberto pelo `sqlite3` da stdlib.
 - Toda mutação de paciente ou catálogo grava o evento de auditoria na mesma transação.
 - Validação só em `dominio` (pydantic estrito). A casca não revalida nem reimplementa regra.
+- Texto livre (`observacao`, `laudo_texto`) nunca entra em cálculo. Dado que vai para estatística é campo de lista fechada (ADR-0004).
 - Nenhum módulo importa `socket`, `http`, `urllib`, `requests` ou `httpx`.
 - Fronteira nova, dependência nova ou mudança de formato em disco exige ADR antes do código.
 

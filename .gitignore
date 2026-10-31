@@ -44,3 +44,19 @@ reports/
 # AI Coding Assistant Metadata
 .claude/
 .gemini/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+build/
+*.spec
+
+# Cofre do GastroEpi (ADR-0003): o arquivo de chave nunca vai para o repositório
+*.chave
