@@ -36,7 +36,8 @@ troca-se só a casca.
   o cofre está aberto. A casca Qt não abre porta.
 - **Formato em disco × confidencialidade × consulta**: o que fica cifrado decide se o
   SQL consegue filtrar e indexar. Hoje idade, sexo, prontuário e data ficam legíveis
-  no arquivo (ADR-0003).
+  no arquivo. O ADR-0003 resolve com SQLCipher: o arquivo inteiro cifrado e o SQL
+  funcionando sobre todos os campos.
 - **Persistência × auditoria**: se o evento de auditoria for gravado fora da transação
   da mutação, um crash deixa estado e cadeia divergentes.
 - **Estatística × persistência**: no Rust, `math` importa `db::Paciente`. Toda mudança
@@ -44,7 +45,8 @@ troca-se só a casca.
 - **Validação × casca**: hoje a regra mora no Zod e não no Rust. Com uma linguagem só,
   a duplicação some, desde que a casca seja proibida de validar.
 - **Senha × chave dos dados**: hoje a recovery key é a própria chave derivada da senha.
-  Trocar a senha obriga a recifrar tudo (ADR-0003 resolve com chave de dados embrulhada).
+  Trocar a senha obriga a recifrar tudo. O ADR-0003 resolve com uma chave de dados
+  aleatória, embrulhada pela senha.
 
 ## Opções
 
@@ -60,8 +62,8 @@ troca-se só a casca.
 ## Trade-off da escolhida
 
 - **Escala:** são ~10 mil pacientes fictícios, 1 usuário e 1 máquina. O desempenho do
-  Python não pesa: decifrar 10 mil tokens AES-GCM com `cryptography` leva dezenas de
-  milissegundos (medir na Fase 2).
+  Python não pesa: o SQLCipher decifra por página dentro do C, e a listagem dos 10 mil
+  pacientes vai ser medida na Fase 2.
 - **Custo real:** o instalador vai de 2 MB para algo entre 80 e 150 MB, e a abertura,
   de < 1 s para 2–5 s, num usuário que abre o app algumas vezes por dia.
 - **Ganho:** a vitrine vem do núcleo (estatística validada, cofre, cadeia de auditoria),
@@ -77,8 +79,9 @@ troca-se só a casca.
   `import-linter`, `pip-audit` (substitui o `cargo audit`).
 - Testes: `pytest`, `hypothesis` (herdeiro do `proptest`), `pytest-qt` com
   `QT_QPA_PLATFORM=offscreen`, `pytest-socket`, `coverage`.
-- Núcleo: `pydantic` v2, `cryptography` (AES-256-GCM, HMAC), `argon2-cffi` (Argon2id),
-  `sqlite3` da stdlib, `numpy`/`scipy`/`statsmodels`/`pandas` em `estatistica/`.
+- Núcleo: `pydantic` v2, `sqlcipher3` (SQLCipher 4, ADR-0003), `cryptography`
+  (embrulho da chave em AES-256-GCM, HMAC), `argon2-cffi` (Argon2id),
+  `numpy`/`scipy`/`statsmodels`/`pandas` em `estatistica/`.
 - Casca: `PySide6-Essentials`.
 
 Durante a transição, o pacote Python mora em `src/gastroepi/`, ao lado dos arquivos
@@ -100,9 +103,14 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
   `tests/fixtures/oraculo_rust_v0_1_16.json` as saídas de cada função de `math/`
   numa grade de entradas, inclusive as bordas (zeros, n = 0, células vazias).
   Os vetores de CPF e data são transcritos de `src/validation.ts`, com a linha citada.
-- Se o ADR-0002 for aceito: emendar a CONSTITUTION para v2.0.0. As restrições técnicas
-  passam a ser Python/Qt; o Princípio V troca Zod por pydantic no `dominio`; o
-  protocolo de início de sessão (`cargo audit`) sai.
+- **Spike do SQLCipher (ADR-0003):** job `windows-latest` com Python 3.13 instala o
+  `sqlcipher3`, congela um script que cria, fecha e reabre um banco cifrado, e roda o
+  executável. Se falhar, o ADR-0003 vai para o plano B (`apsw-sqlite3mc`) antes da Fase 2.
+- Emendar a CONSTITUTION para v2.0.0:
+  - restrições técnicas passam a ser Python/Qt (ADR-0002, aceito);
+  - Princípio II passa a exigir o arquivo inteiro cifrado (ADR-0003);
+  - Princípio V troca Zod por pydantic no `dominio`;
+  - o protocolo de início de sessão (`cargo audit`) sai.
 - **Primeiro vermelho:** o contrato "núcleo não conhece interface" falha com um
   `import PySide6` plantado em `dominio/`. Depois a violação é removida.
 - **Sai quando:** CI verde nos dois sistemas e oráculo versionado.
@@ -120,24 +128,22 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
 
 ### Fase 2 — Cofre, persistência e auditoria
 
-- **Antes do código: ADR-0003, confidencialidade em repouso.** Opções:
-  - (a) cifra por campo, como hoje;
-  - (b) SQLCipher;
-  - (c) registro inteiro cifrado (AES-GCM com o id como dado associado) e índice cego
-    HMAC para unicidade e busca de prontuário.
-
-  Inclinação: (c). Não traz dependência nativa a empacotar, não deixa nada identificável
-  em claro, detecta adulteração por registro, e a estatística já roda em memória.
-  Também entra no ADR-0003 a chave de dados aleatória, embrulhada pela senha (Argon2id
-  t=3, m=64 MiB, p=4) e pela recovery key, para trocar a senha sem recifrar nada.
+- **Cofre ([ADR-0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md)):** banco
+  SQLCipher 4 aberto com uma chave de dados aleatória.
+  - O `gastroepi.chave` guarda essa chave embrulhada pela senha (Argon2id t=3, m=64 MiB, p=4).
+  - A recovery key é a própria chave, em base32 com dígito de verificação.
+  - Trocar a senha só re-embrulha a chave.
+  - "Gerar nova recovery key" faz `PRAGMA rekey`.
+  - A chave HMAC da auditoria é separada e fica dentro do banco.
 - `auditoria/` é pura: calcula o elo HMAC-SHA256 e verifica a sequência. Começa limpa,
   só com `v2`, sem o caminho legado SHA-256.
 - `persistencia/` cuida do schema, das triggers append-only, das migrações idempotentes
   e do repositório. Cada mutação e seu evento entram no mesmo `BEGIN IMMEDIATE`.
 - **Primeiro vermelho:** Cenário 3. Uma linha alterada por `sqlite3` externo é acusada
   com o id e o timestamp da entrada.
-- **Sai quando:** passam o teste de estado do hypothesis, o teste de bytes do ADR-0003,
-  o Cenário 1 (senha duas vezes → recovery key em blocos de 8) e o desbloqueio pela recovery key.
+- **Sai quando:** passam o teste de estado do hypothesis, toda a tabela de Governança
+  do ADR-0003 (bytes, cabeçalho, adulteração, recovery sem arquivo de chave, troca de
+  senha, rekey) e o Cenário 1 (senha duas vezes → recovery key em blocos de 8).
 
 ### Fase 3 — Estatística (`estatistica/`)
 
@@ -180,7 +186,9 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
   - painel com gráficos;
   - StatCalc (qualidade, 2x2, diagnóstico, amostra, tendência, Mantel-Haenszel);
   - auditoria (lista, verificações, integridade física, backup manual, nome do usuário);
-  - exportação CSV.
+  - exportação CSV, com aviso de que o arquivo sai sem cifra.
+- Bloqueio automático do cofre após um tempo sem uso (padrão 15 min), que fecha a
+  conexão e descarta a chave.
 - CLI: `gastroepi demo`, `verificar`, `backup` e `exportar`.
 - `pytest-qt` em `offscreen`, contra `servicos` reais com banco temporário. O CI salva
   a captura de cada tela como artefato para revisão visual.
@@ -226,7 +234,9 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 | ★ Integridade | Teste de estado do hypothesis com mutações aleatórias → verificar cadeia e dados | Holística, contínua | CI | Qualquer inconsistência |
 | ★ Integridade | Adulteração externa de 1 linha (Cenário 3) | Atômica, contínua | CI | Não acusa a 1ª entrada afetada |
 | ★ Integridade | `UPDATE`/`DELETE` em `auditoria` | Atômica, contínua | CI | Não levanta erro |
-| ★ Confidencialidade | Busca de nome/CPF/prontuário/laudo conhecidos nos bytes do `.db` e dos backups (ADR-0003) | Holística, contínua | CI | Qualquer achado |
+| ★ Confidencialidade | Busca de nome/CPF/prontuário/laudo/comorbidade conhecidos nos bytes do `.db`, do `-wal`, dos backups e do `gastroepi.chave` (ADR-0003) | Holística, contínua | CI | Qualquer achado |
+| ★ Confidencialidade | O `sqlite3` da stdlib não abre o banco; 1 byte trocado é acusado pelo HMAC de página (ADR-0003) | Atômica, contínua | CI | Abre, ou a adulteração passa |
+| Implantabilidade | Spike do `sqlcipher3` congelado em `windows-latest` (ADR-0003) | Atômica, acionada na Fase 0 | CI | O executável não cria/reabre o banco |
 | ★ Fronteiras | Contratos do import-linter (núcleo ↛ casca; casca ↛ persistência/cofre; só `persistencia` usa `sqlite3`) | Atômica, contínua | CI + pre-commit | Contrato quebrado |
 | Soberania local | `pytest --disable-socket` + contrato proibindo módulos de rede | Atômica, contínua | CI | Socket aberto ou import de rede |
 | Fidelidade estatística | Todas as funções públicas de `estatistica/` com teste `referencia`; paridade com o oráculo | Atômica, contínua | CI | Função sem teste ou divergência acima da tolerância |

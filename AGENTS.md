@@ -28,7 +28,8 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 - `dominio` não importa outro módulo do projeto e não faz I/O.
 - `estatistica` e `exportacao` importam só `dominio`. Nunca leem o banco.
 - `auditoria` é pura: calcula e verifica elos. Quem grava é `persistencia`.
-- Só `persistencia` importa `sqlite3`. Toda mutação de paciente ou catálogo grava o evento de auditoria na mesma transação.
+- Só `persistencia` importa `sqlcipher3` (ADR-0003). O banco nunca é aberto pelo `sqlite3` da stdlib.
+- Toda mutação de paciente ou catálogo grava o evento de auditoria na mesma transação.
 - Validação só em `dominio` (pydantic estrito). A casca não revalida nem reimplementa regra.
 - Nenhum módulo importa `socket`, `http`, `urllib`, `requests` ou `httpx`.
 - Fronteira nova, dependência nova ou mudança de formato em disco exige ADR antes do código.
@@ -37,6 +38,8 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 
 - Nunca logar, pôr em mensagem de exceção ou exportar sem pedido explícito: nome, CPF, prontuário, laudo, chave, senha, recovery key.
 - Nunca afrouxar as triggers de `auditoria` nem os parâmetros do Argon2id (t=3, m=64 MiB, p=4).
+- Toda conexão começa por `PRAGMA key`; nenhum comando antes dele. Sem cifra por campo: o arquivo inteiro já é cifrado.
+- Nunca gravar em disco a chave de dados, a senha ou a recovery key. O `gastroepi.chave` só guarda a chave embrulhada.
 - Testes e fixtures usam só pacientes do gerador de fictícios com semente. Nunca dado real.
 - Migração de schema: função idempotente + teste com banco da versão anterior.
 
@@ -70,9 +73,9 @@ Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 ```
 src/gastroepi/
   dominio/       Paciente, HistoricoFamiliar, CPF, datas, validação, gerador de fictícios
-  cofre/         Argon2id, AES-256-GCM, chave de dados, recovery key
+  cofre/         Argon2id, chave de dados, gastroepi.chave, recovery key
   auditoria/     elo HMAC, verificação da cadeia e dos dados
-  persistencia/  sqlite3: schema, migrações, repositório, backup
+  persistencia/  SQLCipher: schema, migrações, repositório, backup
   estatistica/   contingência, Wilson, Fleiss, Cochran-Armitage, Mantel-Haenszel, qualidade, descritiva
   exportacao/    CSV pt-BR com proteção contra injeção
   servicos/      casos de uso: a única porta das cascas para o núcleo
