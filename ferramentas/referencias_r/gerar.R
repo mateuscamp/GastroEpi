@@ -1,18 +1,18 @@
 # Valores de referência do R para a estatística do GastroEpi (Fase 3, Princípio IV).
 #
-# Uso: Rscript ferramentas/referencias_r/gerar.R tests/fixtures/referencias_r.json
+# Uso: Rscript ferramentas/referencias_r/gerar.R <saida.json> tests/fixtures/oraculo_rust_v0_1_16.json5
 # Roda no CI (job "referencias-r" do python.yml), com a versão do R fixa. O CI falha se
 # a saída divergir do JSON versionado. Não editar o JSON à mão: mudar este script.
 #
 # Cada função do R abaixo é a implementação de referência citada nos testes. Onde o R
 # base não tem a medida, usa-se o pacote indicado; onde nenhum pacote a tem, a fórmula
-# publicada é recalculada aqui e a fonte vem no comentário.
+# publicada é recalculada aqui e a fonte vem no comentário. Sem epiR: ele depende do sf,
+# que exige bibliotecas de sistema (udunits, GDAL).
 
 suppressPackageStartupMessages({
   library(jsonlite)
   library(epitools)
   library(DescTools)
-  library(epiR)
 })
 
 z_de <- function(alfa) qnorm(1 - alfa / 2)
@@ -39,17 +39,13 @@ razoes_de_verossimilhanca <- function(vp, fp, fn, vn, alfa) {
 }
 
 diagnostico <- function(vp, fp, fn, vn, alfa) {
-  tabela <- as.table(matrix(c(vp, fn, fp, vn), nrow = 2))
-  epir <- epi.tests(tabela, method = "wilson", conf.level = 1 - alfa)$detail
-  linha <- function(nome) as.numeric(epir[epir$statistic == nome, c("est", "lower", "upper")])
   c(
     list(
       entrada = c(vp, fp, fn, vn), alfa = alfa,
       sensibilidade_ic = wilson(vp, vp + fn, alfa)$ic,
       especificidade_ic = wilson(vn, fp + vn, alfa)$ic,
       vpp_ic = wilson(vp, vp + fp, alfa)$ic,
-      vpn_ic = wilson(vn, fn + vn, alfa)$ic,
-      epir_lr_positivo = linha("lr.pos"), epir_lr_negativo = linha("lr.neg")
+      vpn_ic = wilson(vn, fn + vn, alfa)$ic
     ),
     razoes_de_verossimilhanca(vp, fp, fn, vn, alfa)
   )
@@ -130,10 +126,37 @@ descritivas <- function(v) {
        minimo = min(v), maximo = max(v))
 }
 
+base_do_oraculo <- function(caminho) {
+  # Os 24 pacientes fictícios do oráculo v0.1.16 (um exame cada). O JSON5 tem Infinity,
+  # que o jsonlite não lê; esses campos não são usados aqui.
+  texto <- gsub("-?Infinity", "null", paste(readLines(caminho, encoding = "UTF-8"), collapse = "\n"))
+  fromJSON(texto)$pacientes_ficticios
+}
+
+descritivas_da_base <- function(base) {
+  contar <- function(v) as.list(table(v))
+  por_grupo <- function(grupo, valor) lapply(split(valor, grupo), descritivas)
+  com_polipo <- sum(base$polipo > 0)
+  list(
+    n_exames = nrow(base),
+    frequencia_sexo = contar(base$sexo),
+    frequencia_polipos = contar(base$polipo),
+    frequencia_indicacao = contar(base$indicacao_exame),
+    frequencia_comorbidades = contar(unlist(base$comorbidades)),
+    frequencia_sintomas = contar(unlist(base$sintomas)),
+    idade_por_sexo = por_grupo(base$sexo, base$idade),
+    polipos_por_indicacao = por_grupo(base$indicacao_exame, base$polipo),
+    sexo_por_indicacao = lapply(split(base$indicacao_exame, base$sexo), contar),
+    prevalencia_polipo = wilson(com_polipo, nrow(base), 0.05)
+  )
+}
+
+args <- commandArgs(trailingOnly = TRUE)
+
 grades <- list(
   versao_r = R.version.string,
-  pacotes = lapply(c(jsonlite = "jsonlite", epitools = "epitools", DescTools = "DescTools",
-                     epiR = "epiR"), function(p) as.character(packageVersion(p))),
+  pacotes = lapply(c(jsonlite = "jsonlite", epitools = "epitools", DescTools = "DescTools"),
+                  function(p) as.character(packageVersion(p))),
   wilson = mapply(wilson,
     c(0, 10, 5, 1, 37, 3, 50, 0, 1),
     c(10, 10, 10, 100, 120, 7, 1000, 1, 1),
@@ -162,8 +185,8 @@ grades <- list(
   qui_quadrado_rxc = list(qui_quadrado_rxc(list(c(10, 20), c(30, 40))),
                           qui_quadrado_rxc(list(c(5, 10, 15), c(20, 25, 30), c(10, 5, 1)))),
   descritivas = list(descritivas(c(1, 2, 3, 4, 5)), descritivas(c(7.5)),
-                     descritivas(c(2, 2, 2, 2)), descritivas(c(1, 100, 3, 8, 2, 9.5, 40)))
+                     descritivas(c(2, 2, 2, 2)), descritivas(c(1, 100, 3, 8, 2, 9.5, 40))),
+  base_do_oraculo = descritivas_da_base(base_do_oraculo(args[2]))
 )
 
-args <- commandArgs(trailingOnly = TRUE)
 write_json(grades, args[1], auto_unbox = TRUE, digits = NA, pretty = TRUE, na = "null")

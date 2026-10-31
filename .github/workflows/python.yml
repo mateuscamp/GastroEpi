@@ -88,9 +88,9 @@ jobs:
           r-version: "4.5.1"
           use-public-rspm: true
       - name: Instalar os pacotes de referência
-        run: Rscript -e 'install.packages(c("jsonlite", "epitools", "DescTools", "epiR"))'
+        run: Rscript -e 'install.packages(c("jsonlite", "epitools", "DescTools"))'
       - name: Gerar as referências
-        run: Rscript ferramentas/referencias_r/gerar.R referencias_r.json
+        run: Rscript ferramentas/referencias_r/gerar.R referencias_r.json tests/fixtures/oraculo_rust_v0_1_16.json5
       - uses: actions/upload-artifact@v4
         if: always()
         with:
