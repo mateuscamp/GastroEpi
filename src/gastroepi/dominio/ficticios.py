@@ -8,10 +8,10 @@ não estimativas epidemiológicas.
 
 import random
 from datetime import date, timedelta
-from typing import NamedTuple
 
 from gastroepi.dominio.cpf import digitos_verificadores
 from gastroepi.dominio.exame import Boston, Exame, Examinador
+from gastroepi.dominio.ficha import Ficha
 from gastroepi.dominio.lesao import ADENOMAS_CONVENCIONAIS, SERRILHADAS, Lesao
 from gastroepi.dominio.listas import (
     UF,
@@ -25,12 +25,6 @@ from gastroepi.dominio.listas import (
     Sexo,
 )
 from gastroepi.dominio.paciente import HistoricoFamiliar, Paciente
-
-
-class FichaFicticia(NamedTuple):
-    paciente: Paciente
-    exames: tuple[Exame, ...]
-
 
 NOMES = {
     Sexo.FEMININO: ("Ana", "Beatriz", "Carla", "Daniela", "Elisa", "Fernanda", "Gabriela",
@@ -193,15 +187,15 @@ def _datas_dos_exames(sorteio: random.Random) -> list[date]:
     return datas
 
 
-def _ficha(sorteio: random.Random, numero: int) -> FichaFicticia:
+def _ficha(sorteio: random.Random, numero: int) -> Ficha:
     datas = _datas_dos_exames(sorteio)
     paciente = _paciente(sorteio, numero, datas[0])
     primeiro = _exame(sorteio, datas[0], _sortear(sorteio, PESO_INDICACAO))
     retornos = (_exame(sorteio, d, Indicacao.VIGILANCIA_POS_POLIPECTOMIA) for d in datas[1:])
-    return FichaFicticia(paciente, (primeiro, *retornos))
+    return Ficha(paciente=paciente, exames=(primeiro, *retornos))
 
 
-def gerar_fichas(semente: int, quantidade: int) -> tuple[FichaFicticia, ...]:
+def gerar_fichas(semente: int, quantidade: int) -> tuple[Ficha, ...]:
     """`quantidade` pacientes fictícios, cada um com 1 a 3 exames, sempre iguais por semente."""
     sorteio = random.Random(semente)
     return tuple(_ficha(sorteio, numero) for numero in range(1, quantidade + 1))

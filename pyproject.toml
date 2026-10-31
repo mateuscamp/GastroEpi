@@ -6,6 +6,8 @@ readme = "README.md"
 authors = [{ name = "Mateus Campelo", email = "mateuscampelob@gmail.com" }]
 requires-python = ">=3.13,<3.15"
 dependencies = [
+    "argon2-cffi>=25.1.0",
+    "cryptography>=50.0.2",
     "pydantic>=2.14.2",
     "sqlcipher3>=0.6.4",
 ]
@@ -60,6 +62,8 @@ skip_empty = true
 python_version = "3.13"
 strict = true
 files = ["src", "tests", "ferramentas"]
+# sqlcipher3 não publica tipos; os dele ficam em typings/ (API do sqlite3).
+mypy_path = "typings"
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]

@@ -7,7 +7,8 @@ from hypothesis import strategies as st
 
 from gastroepi.dominio.cpf import normalizar_cpf
 from gastroepi.dominio.exame import Exame, idade_no_exame
-from gastroepi.dominio.ficticios import FichaFicticia, gerar_fichas
+from gastroepi.dominio.ficha import Ficha
+from gastroepi.dominio.ficticios import gerar_fichas
 from gastroepi.dominio.listas import Histologia, Indicacao
 from gastroepi.dominio.paciente import Paciente
 
@@ -64,7 +65,7 @@ def test_duzentas_fichas_cobrem_todas_as_histologias_e_indicacoes() -> None:
 @given(st.integers(min_value=0, max_value=2**32))
 def test_toda_ficha_de_qualquer_semente_revalida_pelo_json(semente: int) -> None:
     for ficha in gerar_fichas(semente=semente, quantidade=3):
-        assert isinstance(ficha, FichaFicticia)
+        assert isinstance(ficha, Ficha)
         assert Paciente.model_validate_json(ficha.paciente.model_dump_json()) == ficha.paciente
         for exame in ficha.exames:
             assert Exame.model_validate_json(exame.model_dump_json()) == exame

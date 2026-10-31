@@ -167,6 +167,17 @@ def test_sem_ciclo_entre_modulos() -> None:
     assert not ciclos, "ciclos de import:\n" + "\n".join(ciclos)
 
 
+def test_todo_modulo_tem_arquivo_de_teste() -> None:
+    """AGENTS.md: src/gastroepi/<modulo>/<arquivo>.py tem tests/<modulo>/test_<arquivo>.py."""
+    faltando = [
+        relativo(c)
+        for c in arquivos_python()
+        if c.name != "__init__.py"
+        and not (RAIZ / "tests" / c.parent.name / f"test_{c.name}").is_file()
+    ]
+    assert not faltando, "sem arquivo de teste:\n" + "\n".join(faltando)
+
+
 @pytest.mark.filterwarnings("ignore:A test tried to use socket.socket")
 def test_suite_roda_sem_rede() -> None:
     """Princípio I: se alguém tirar --disable-socket do pyproject, este teste acusa."""

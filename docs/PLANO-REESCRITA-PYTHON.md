@@ -99,8 +99,8 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
 
 ### Fase 0 — Esqueleto e portões (nenhuma funcionalidade)
 
-**Estado em 2026-10-31:** feita e verde localmente (Linux), com a sonda congelada
-passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #6). A sonda
+congelada passou no `windows-latest`: pasta de 25 MB, SQLCipher 4.19.0.
 
 - `pyproject.toml` com `uv`; pacotes vazios de cada fronteira; `tests/arquitetura/`
   adaptado da skill (arquivo ≤ 400, função ≤ 40, nomes grepáveis, sem ciclo).
@@ -126,9 +126,8 @@ passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
 
 ### Fase 1 — Domínio e validação (`dominio/`)
 
-**Estado em 2026-10-31:** feita e verde localmente (Linux): `uv run poe check` com 227
-testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
-Falta ver o CI em Ubuntu e Windows.
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #7): `uv run poe check`
+com 227 testes em ~2 s e 100% dos ramos em `dominio`, agora um passo do próprio `poe check`.
 
 - Tipos do ADR-0004: `Paciente`, `HistoricoFamiliar`, `Exame`, `Examinador` (nome + CRM
   + UF), `Boston`, `Lesao` e as listas fechadas em `dominio/listas.py` (`VERSAO_DAS_LISTAS = 1`).
@@ -161,6 +160,42 @@ Plano original da fase:
   hypothesis (CPF válido gerado passa; um dígito trocado falha); cobertura de ramos de 100%.
 
 ### Fase 2 — Cofre, persistência e auditoria
+
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #8): `uv run poe check`
+com 415 testes em ~5 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, o Cenário 3, visto na asserção: `assert () == (Divergencia(...),)`.
+- `tests/arquitetura/test_adr_0003.py` tem um teste por linha da Governança do ADR-0003.
+  `tests/arquitetura/test_mutacoes_auditadas.py` é o teste de estado do hypothesis
+  (Governança do ADR-0002). O Cenário 1 está em `tests/servicos/test_acesso.py`.
+- A verificação tem três camadas: páginas (`cipher_integrity_check`), cadeia e dados.
+  A dos dados aponta, por registro, o motivo e a entrada contrariada:
+  - alterado, sem evento, ausente e excluído presente;
+  - histórico interrompido: o "antes" de uma entrada não é o "depois" da anterior.
+    Assim, editar pelo app depois de uma alteração por fora não apaga o rastro.
+- Achados:
+  - Sem `foreign_keys = ON`, editar uma ficha deixava lesões órfãs.
+  - Logo após o `PRAGMA rekey` em WAL, o `.db` ainda tem páginas da chave antiga, e o
+    `cipher_integrity_check` as acusa. O rekey agora faz `wal_checkpoint(TRUNCATE)`.
+  - Com chave errada, o SQLCipher 4.19 escreve `ERROR CORE … hmac check failed` no
+    stderr. Toda conexão roda `PRAGMA cipher_log_level = NONE` logo após o `PRAGMA key`,
+    e um teste confere o stderr vazio.
+- Decisões de implementação: Notas do ADR-0003.
+
+Medição (`uv run python ferramentas/medir_listagem.py 10000 .`), Linux, NVMe:
+
+| 10 mil pacientes fictícios (12.941 exames, 14.925 lesões) | Tempo |
+|---|---|
+| Listar as fichas completas (o que a tabela da Fase 5 e a estatística leem) | 0,35 s |
+| Buscar 1 ficha | < 1 ms |
+| Verificar páginas, cadeia e dados | 0,52 s |
+| Cadastrar, um por transação com o evento de auditoria | 1,7 ms cada (16,7 s no total) |
+| Tamanho do `gastroepi.db` | 16,2 MiB |
+
+Num tmpfs o cadastro cai para 0,2 ms: o custo é o fsync de cada transação. Listar e
+verificar não mudam.
+
+Plano original da fase:
 
 - **Cofre ([ADR-0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md)):** banco
   SQLCipher 4 aberto com uma chave de dados aleatória.
@@ -320,6 +355,5 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 
 ## Próximo passo
 
-Fase 0: esqueleto `uv` com os portões de arquitetura e o CI verde em Ubuntu e Windows.
-O primeiro vermelho é o contrato "núcleo não conhece interface" falhando contra um
-`import PySide6` plantado.
+Fase 3: estatística. O primeiro vermelho é Wilson com 0/10 igual ao valor do R. Ela lê
+as fichas pelo `servicos` (listar 10 mil leva 0,35 s) e não toca no banco.

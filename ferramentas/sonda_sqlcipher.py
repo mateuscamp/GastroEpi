@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import sqlcipher3  # type: ignore[import-untyped]  # o binding não publica tipos
+import sqlcipher3  # tipos em typings/sqlcipher3 (o binding não publica os seus)
 
 SEGREDO = "segredo-da-sonda-gastroepi"
 
