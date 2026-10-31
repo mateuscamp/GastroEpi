@@ -1,6 +1,11 @@
 # GastroEpi — decisão 0002: como reescrever o app inteiro em Python
 
-**Status:** Aceito · **Data:** 2026-10-31 · ADR: [0002](adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md)
+**Status:** Aceito · **Data:** 2026-10-31 · ADRs: [0002](adr/0002-reescrever-em-python-com-nucleo-puro-e-casca-qt.md),
+[0003](adr/0003-cifrar-o-banco-inteiro-com-sqlcipher.md), [0004](adr/0004-registrar-o-exame-em-dados-estruturados.md)
+
+Origem das ideias de durabilidade, relatório e exportação: a conversa de 2026-10-24
+(sessão `claude.ai/code/session_01EzZwqyjZDjVB2241MnSp7N`), registrada em
+`docs/PLANO-REESTRUTURACAO.md` na branch `docs/adr-0001-arquitetura`.
 
 **Bottom line**: reescrever como **um executável Python** com **núcleo puro** (domínio,
 cofre, auditoria, persistência, estatística, exportação, serviços) e **casca desktop
@@ -14,7 +19,7 @@ troca-se só a casca.
 | ★ | Característica | Origem (frase do problema) | Como se mede |
 |---|---|---|---|
 | ★ | Integridade e confidencialidade do dado clínico | CONSTITUTION I–III; "não corromper os dados" (prioridade nº 1); o usuário leigo vai digitar pacientes reais depois da entrega | (1) hypothesis com sequências aleatórias de mutação → 0 inconsistências na cadeia e nos dados; (2) 1 linha adulterada por fora → acusa a 1ª entrada afetada; (3) 0 ocorrências de nome/CPF/prontuário/laudo conhecidos nos bytes do `.db` e dos backups (ADR-0003) |
-| | Implantabilidade para leigo no Windows | "usuário leigo no Windows", sem suporte | Instalador gerado no CI (`windows-latest`) a cada tag; `GastroEpi.exe --smoke` sai com 0; funciona sem Python instalado; ≤ 250 MB; abertura a frio ≤ 8 s (Tauri hoje: 2 MB, < 1 s) |
+| | Implantabilidade e operação sem suporte | "usuário leigo no Windows"; "algo que eu pudesse largar na mão dele" sem ser chamado (conversa de 2026-10-24) | Instalador gerado no CI (`windows-latest`) a cada tag; `GastroEpi.exe --smoke` sai com 0; funciona sem Python instalado; ≤ 250 MB; abertura a frio ≤ 8 s (Tauri hoje: 2 MB, < 1 s) |
 | | Fidelidade estatística | Princípio IV; os testes Rust atuais só checam sinal (`p_valor > 0.0`) | 100% das funções públicas de `estatistica/` com teste de valor de referência citado (R/Epi Info, tolerância 1e-6) e paridade com o oráculo v0.1.16 |
 | | Soberania local | Princípio I | Suíte inteira com `--disable-socket`; 0 imports de rede no pacote |
 | | Testabilidade headless | ADR-0001: "testes presos ao WebKit; o CI só compila" | `uv run pytest` sem display em ≤ 60 s, em Ubuntu e Windows; cobertura de ramos ≥ 90% no núcleo |
@@ -94,15 +99,19 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
 
 ### Fase 0 — Esqueleto e portões (nenhuma funcionalidade)
 
+**Estado em 2026-10-31:** feita e verde localmente (Linux), com a sonda congelada
+passando no Linux. Falta ver o CI em Ubuntu e Windows, o que depende de push.
+
 - `pyproject.toml` com `uv`; pacotes vazios de cada fronteira; `tests/arquitetura/`
   adaptado da skill (arquivo ≤ 400, função ≤ 40, nomes grepáveis, sem ciclo).
 - Contratos do import-linter da tabela de Governança do ADR-0002.
 - `pytest --disable-socket` por padrão; `.github/workflows/python.yml` com Ubuntu e Windows.
 - O `build.yml` do Tauri fica como está até o corte.
-- **Oráculo:** `src-tauri/examples/oraculo.rs` grava em
-  `tests/fixtures/oraculo_rust_v0_1_16.json` as saídas de cada função de `math/`
-  numa grade de entradas, inclusive as bordas (zeros, n = 0, células vazias).
-  Os vetores de CPF e data são transcritos de `src/validation.ts`, com a linha citada.
+- **Oráculo:** `ferramentas/oraculo_rust/` é um crate à parte que inclui os arquivos de
+  `src-tauri/src/math/` por `#[path]`, sem compilar o Tauri. Ele grava em
+  `tests/fixtures/oraculo_rust_v0_1_16.json5` as saídas de cada função numa grade de
+  entradas, inclusive as bordas (zeros, n = 0, células vazias). Os vetores de CPF e
+  data (`vetores_validacao_v0_1_16.json`) saem do próprio `src/validation.ts`, rodado no Node.
 - **Spike do SQLCipher (ADR-0003):** job `windows-latest` com Python 3.13 instala o
   `sqlcipher3`, congela um script que cria, fecha e reabre um banco cifrado, e roda o
   executável. Se falhar, o ADR-0003 vai para o plano B (`apsw-sqlite3mc`) antes da Fase 2.
@@ -162,7 +171,35 @@ termina com a checagem completa verde no CI em Ubuntu e Windows.
 - **Primeiro vermelho:** Wilson com 0/10 igual ao valor do R.
 - **Sai quando:** a fitness "toda função pública tem teste de referência" passa.
 
-### Fase 4 — Durabilidade (ADR-0004)
+### Fase 3b — Relatório epidemiológico fechado
+
+Pedido da conversa de 2026-10-24: o filho do dono aperta um botão e recebe um documento
+pronto, sem escolher análise, variável nem teste; no máximo escolhe o período.
+
+- **Especificação, antes do código:** uma lista de 5 a 10 perguntas combinada com o dono
+  (ex.: "histórico familiar aumenta pólipo?", "a partir de que idade aumenta o adenoma?",
+  "homem tem mais que mulher?"). Sem a lista, esta fase não começa.
+- **Conteúdo fixo:**
+  - descrição da base;
+  - associação de cada pergunta pré-exame com pólipo e com adenoma, com correção de
+    Benjamini-Hochberg;
+  - uma regressão logística multivariável (`statsmodels`) com todas as variáveis juntas;
+  - tendência por faixa etária.
+- **Frases automáticas** em português simples para cada resultado. Exemplo: "pacientes com
+  histórico familiar de 1º grau tiveram cerca de duas vezes mais chance de pólipo,
+  mesmo considerando idade e sexo".
+- **O relatório se protege sozinho:**
+  - "poucos casos, resultado não confiável" em vez de um número enganoso;
+  - quantos dados faltam por campo;
+  - aviso, e nunca travamento, quando a regressão não converge ou há separação perfeita;
+  - parágrafo fixo de limitações: são pessoas que procuraram o exame, e associação não é causa.
+- **Exportação para análise** (ADR-0004): uma linha por exame, comorbidades e sintomas
+  como colunas sim/não, sem nome, CPF ou prontuário, com dicionário de dados. É a saída
+  para quem quiser ir além do relatório (R, Jamovi).
+- **Primeiro vermelho:** a regressão logística de uma base fictícia fixa bate com o
+  `glm(..., family = binomial)` do R até 1e-6.
+
+### Fase 4 — Durabilidade (ADR-0005)
 
 Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 
@@ -175,7 +212,13 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 - Backup ao fechar e a cada 15 min se houve alteração.
 - Instância única por trava de arquivo (sem socket).
 - O app se recusa a abrir banco dentro de pasta sincronizada (OneDrive/Drive/Dropbox).
-- Destino externo opcional, com aviso se a última cópia tiver mais de 7 dias.
+- Destino externo opcional, com aviso se a última cópia tiver mais de 7 dias. Pode ser
+  um pendrive ou uma pasta do Google Drive, com três regras da conversa de 2026-10-24:
+  - o banco em uso nunca fica na pasta sincronizada; só as cópias prontas e conferidas
+    vão para lá, junto com o `gastroepi.chave`;
+  - a recovery key nunca vai para o mesmo Drive: fica no papel;
+  - com cópias na nuvem, a senha deve ser uma frase longa (~4 palavras), porque o
+    Argon2id só atrasa a adivinhação.
 - **Primeiro vermelho:** bytes corrompidos → abrir → modo somente leitura.
 
 ### Fase 5 — Casca Qt (`ui_qt/`) e CLI (`cli/`)
@@ -196,7 +239,7 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 - **Sai quando:** os 35 comandos da v0.1.16 (tabela abaixo) existem em `servicos` e são
   alcançáveis por uma tela.
 
-### Fase 6 — Empacotamento Windows (ADR-0005: PyInstaller, Nuitka ou Briefcase)
+### Fase 6 — Empacotamento Windows (ADR-0006: PyInstaller, Nuitka ou Briefcase)
 
 - Instalador gerado no CI em cada tag.
 - `GastroEpi.exe --smoke`: abre um banco temporário, cria senha, cadastra um paciente
@@ -244,7 +287,7 @@ Trata as lacunas levantadas em 2026-10-24 (branch `docs/adr-0001-arquitetura`):
 | Implantabilidade | Roteiro de 10 min na máquina Windows de teste | Manual, antes de cada entrega | Mateus | Qualquer passo estranho anotado sem correção |
 | Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
 | Legibilidade | `tests/arquitetura` + `mypy --strict` | Atômica, contínua | CI + pre-commit | Arquivo > 400, função > 40, erro de tipo |
-| Oráculo congelado | Diff do PR em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | Atômica, contínua | CI | Mudança fora de `src-tauri/examples/oraculo.rs` |
+| Oráculo congelado | Diff do PR em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | Atômica, contínua | CI | Qualquer mudança |
 
 ## Contrato para o agente
 
