@@ -216,6 +216,50 @@ Plano original da fase:
 
 ### Fase 3 — Estatística (`estatistica/`)
 
+**Estado em 2026-10-31:** feita. Verde no CI em Ubuntu e Windows (PR #9): `uv run poe check`
+com 600 testes em ~15 s e 100% dos ramos no pacote inteiro.
+
+- Primeiro vermelho, Wilson 0/10 contra `prop.test(0, 10, correct = FALSE)`, visto na
+  asserção: `assert Intervalo(inferior=0.0, superior=0.0) == approx((0.0, 0.2775328))`.
+- Referências do R: `ferramentas/referencias_r/gerar.R` (R 4.5.1, epitools, DescTools). O
+  job `referencias-r` regenera `tests/fixtures/referencias_r.json` e falha se ele divergir do
+  versionado. O epiR ficou de fora: ele puxa o sf, que exige bibliotecas de sistema. As LR
+  de Simel, o inquérito e o Fleiss são a fórmula publicada recalculada no R. Os exemplos da
+  documentação do R também são testes: TeaTasting (`fisher.test`) e fumantes (`prop.trend.test`).
+- Fitness em `tests/arquitetura/test_estatistica.py`:
+  - toda função pública chamada por um teste `referencia`. Foi vista falhando com uma
+    função plantada, e já pegou um teste que chamava a função por um ajudante;
+  - `estatistica/` não lê texto livre.
+  - Isentos, com motivo: `entrada.py` (erros) e `variaveis.py` (só lê o domínio).
+- Indicadores do ADR-0004 seguem a ACG/ASGE 2024, escolha do dono. A emenda (denominador,
+  limiares, pendentes de histologia) está nas Notas do ADR-0004.
+- Divergências do oráculo, documentadas nos testes. Não houve divergência numérica entre o
+  R e o oráculo fora das bordas:
+  - p < 1e-16: a v0.1.16 dava 0 (1 − cdf) e o R dá ~1e-23;
+  - 0/0 vira NaN, não 0;
+  - Wilson com n = 0 dá [0, 1], não [0, 0];
+  - estratos todos vazios dão erro tipado;
+  - frequências dividem pelo nº de exames e mostram "Nenhuma";
+  - os indicadores de qualidade divergem de propósito.
+- O Cochran-Armitage não teve a divergência N/(N−1) esperada: a v0.1.16 já usava a
+  variância do `prop.trend.test`.
+- Unidade de análise: o exame. A prevalência de pólipo é a proporção de exames com lesão.
+- Peso no executável congelado (job `sonda-estatistica`, `windows-latest`, PyInstaller onedir):
+
+| Executável congelado | Pasta | Zip `-mx=9` (aproxima o instalador) |
+|---|---|---|
+| Sonda do SQLCipher (Fase 0, só a stdlib e o `sqlcipher3`) | 25 MB | — |
+| `gastroepi.estatistica` (numpy + scipy) | 176 MB | 69 MB |
+| + statsmodels e pandas (projeção da Fase 3b) | 209 MB | 86 MB |
+
+  O teto do ADR-0002 é 250 MB para o instalador, e o instalador comprimido fica perto do zip.
+  Sobram ~160 MB para o Qt (Fase 5), o que deve bastar. Mas a pasta instalada já passa de
+  200 MB, e o scipy é quase todo o peso. Se a Fase 6 medir perto do limite, o primeiro corte
+  é trocar o scipy por fórmulas próprias: hoje ele dá só `norm.ppf`, `chi2.sf` e
+  `fisher_exact`, e as referências do R continuam valendo como rede de segurança.
+
+Plano original da fase:
+
 - Funções a portar:
   - Wilson e IC das razões de verossimilhança;
   - 2x2 (OR de Woolf, RR, Pearson, Yates, Fisher) e teste diagnóstico;
@@ -355,5 +399,6 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 
 ## Próximo passo
 
-Fase 3: estatística. O primeiro vermelho é Wilson com 0/10 igual ao valor do R. Ela lê
-as fichas pelo `servicos` (listar 10 mil leva 0,35 s) e não toca no banco.
+Fase 3b (relatório fechado) espera a lista de perguntas do dono. Sem ela, a Fase 4
+(durabilidade) pode começar: o primeiro vermelho são bytes corrompidos → abrir → modo
+somente leitura.

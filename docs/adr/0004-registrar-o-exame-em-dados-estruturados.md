@@ -148,3 +148,20 @@ Estende: 0002, 0003
   hiperplásico, aguardando e sem histologia exigem "não se aplica".
 - Entre os campos de qualidade, só a intubação cecal é obrigatória; Boston (os 3
   segmentos ou nenhum) e tempo de retirada (minutos, com decimal) podem faltar.
+
+**Emenda dos indicadores (2026-10-31, Fase 3, escolhas do dono no AskUserQuestion):**
+- Diretriz: Rex DK, Anderson JC, Butterly LF et al. Quality indicators for colonoscopy.
+  Am J Gastroenterol 2024;119:1754-1780 (ACG/ASGE). Os 25% da v0.1.16 eram a meta de 2015.
+  Limiares de alerta: adenoma ≥ 35%, lesão serrilhada séssil ≥ 6%, intubação cecal ≥ 95%,
+  preparo adequado ≥ 90% e retirada ≥ 8 min (média nos exames sem lesão).
+- O denominador da taxa de adenoma segue a diretriz de 2024 e substitui "só rastreio de risco
+  médio": ≥ 45 anos, com rastreio (médio ou aumentado), vigilância ou diagnóstica por sintomas.
+  Ficam de fora FIT positivo, DII e "outra". O mesmo denominador vale para adenoma avançado,
+  serrilhada, adenomas por exame e taxa de pólipos.
+- Exame com lesão aguardando histologia fica fora dos indicadores histológicos até o laudo
+  chegar, e o painel mostra quantos estão pendentes.
+- Decisão de implementação, sem consulta ao dono: a taxa "serrilhada" conta só a lesão
+  serrilhada séssil, porque a meta de 6% é da SSL. O adenoma serrilhado tradicional continua
+  `serrilhada` no domínio.
+- O alerta informa se o IC de Wilson inteiro está abaixo da meta: com poucos exames, estar
+  abaixo da meta pode ser acaso.
