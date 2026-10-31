@@ -92,7 +92,7 @@ def inserir_examinador(conexao: sqlcipher3.Connection, examinador: Examinador) -
     return ItemNovo(Entidade.EXAMINADOR, _id_inserido(cursor), examinador.model_dump_json())
 
 
-def _garantir_examinador(
+def garantir_examinador(
     conexao: sqlcipher3.Connection, examinador: Examinador
 ) -> tuple[int, ItemNovo | None]:
     linha = conexao.execute(
@@ -123,7 +123,7 @@ class _Resolvedor:
         return achado[1]
 
     def examinador(self, examinador: Examinador) -> None:
-        id_, novo = _garantir_examinador(self.conexao, examinador)
+        id_, novo = garantir_examinador(self.conexao, examinador)
         self.examinadores[(examinador.crm, examinador.uf)] = id_
         if novo is not None:
             self.novos.append(novo)

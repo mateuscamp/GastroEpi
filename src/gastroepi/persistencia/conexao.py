@@ -11,6 +11,7 @@ def abrir_conexao(caminho: Path, chave: bytes) -> sqlcipher3.Connection:
     conexao = sqlcipher3.connect(str(caminho), isolation_level=None)
     conexao.row_factory = sqlcipher3.Row
     conexao.execute(f"PRAGMA key = \"x'{chave.hex()}'\"")
+    conexao.execute("PRAGMA foreign_keys = ON")
     return conexao
 
 

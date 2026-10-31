@@ -10,6 +10,7 @@ Nenhum `repr` mostra os snapshots: eles têm nome, CPF e laudo.
 import hashlib
 import hmac
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -65,3 +66,27 @@ def calcular_elo(chave: bytes, anterior: str, evento: Evento) -> str:
     ]
     mensagem = json.dumps(partes, ensure_ascii=False, separators=(",", ":")).encode()
     return f"{VERSAO_DO_ELO}:{hmac.new(chave, mensagem, hashlib.sha256).hexdigest()}"
+
+
+@dataclass(frozen=True, slots=True)
+class QuebraDaCadeia:
+    """A primeira entrada cujo elo não confere (Cenário 3)."""
+
+    entrada_id: int
+    momento: str
+
+
+def verificar_cadeia(chave: bytes, entradas: Iterable[EntradaDeAuditoria]) -> QuebraDaCadeia | None:
+    """Percorre as entradas em ordem de id e para na primeira cujo elo não confere.
+
+    Entrada apagada no meio aparece como quebra da seguinte, que encadeava nela.
+    Apagar só as últimas não quebra nada: as triggers impedem, e quem tem a chave pode
+    refazer a cadeia de qualquer jeito (ADR-0003, "Aceito conscientemente").
+    """
+    anterior = ELO_INICIAL
+    for entrada in entradas:
+        esperado = calcular_elo(chave, anterior, entrada.evento)
+        if not hmac.compare_digest(esperado, entrada.elo):
+            return QuebraDaCadeia(entrada.id, entrada.evento.momento)
+        anterior = entrada.elo
+    return None
