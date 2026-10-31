@@ -432,6 +432,14 @@ Plano original da fase:
   exportar → fechar e reabrir.
 - **Sai quando:** o roteiro passa e o `--smoke` está verde no CI.
 
+Estado (2026-10-31): ADR-0006 aceito (PyInstaller onedir + Inno Setup por usuário, sem
+administrador). Medido no `windows-latest` com o app inteiro: pasta de 272 MB, 7z LZMA2 de
+62 MB (o compressor do Inno), janela pronta em 3,9 s na 1ª rodada. O scipy fica: a folga para o
+teto é de 4x. O job `instalador (windows)` congela, gera o instalador, instala em silêncio e roda o
+`--smoke` do instalado em todo PR, falhando acima de 250 MB ou 8 s. O instalador sai como
+artefato (90 dias em tag `v*`). Falta o roteiro manual (`docs/ROTEIRO-WINDOWS.md`) na máquina de
+teste, que é do Mateus.
+
 ### Fase 7 — Corte
 
 - Um commit remove `src-tauri/`, os arquivos TS/CSS de `src/`, `package*.json`,
@@ -470,7 +478,7 @@ tabela aplica `pacientes.corresponde_ao_termo`, a regra de `buscar_por_termo`.
 | ★ Fronteiras | Contratos do import-linter (núcleo ↛ casca; casca ↛ persistência/cofre; só `persistencia` usa `sqlite3`) | Atômica, contínua | CI + pre-commit | Contrato quebrado |
 | Soberania local | `pytest --disable-socket` + contrato proibindo módulos de rede | Atômica, contínua | CI | Socket aberto ou import de rede |
 | Fidelidade estatística | Todas as funções públicas de `estatistica/` com teste `referencia`; paridade com o oráculo | Atômica, contínua | CI | Função sem teste ou divergência acima da tolerância |
-| Implantabilidade | Build do instalador + `--smoke` em `windows-latest`; tamanho | Holística, acionada por tag | CI | `--smoke` ≠ 0 ou > 250 MB |
+| Implantabilidade | Build do instalador, instalação silenciosa e `--smoke` do instalado em `windows-latest`; tamanho e tempo (ADR-0006) | Holística, contínua (todo PR e tag) | CI | `--smoke` ≠ 0, > 250 MB ou > 8 s |
 | Implantabilidade | Roteiro de 10 min na máquina Windows de teste | Manual, antes de cada entrega | Mateus | Qualquer passo estranho anotado sem correção |
 | ★ Durabilidade | Banco estragado → somente leitura + oferta; cópia ruim nunca ganha o nome; rotação por data; pasta sincronizada recusada (ADR-0005) | Atômica + holística (hypothesis), contínua | CI | Qualquer linha da Governança do ADR-0005 |
 | Testabilidade | Tempo da suíte e cobertura de ramos do núcleo | Holística, contínua | CI | > 60 s ou < 90% |
@@ -486,7 +494,6 @@ Ver [`AGENTS.md`](../AGENTS.md), seção "Fronteiras (ADR-0002)".
 
 ## Próximo passo
 
-Fase 6 (empacotamento Windows, ADR-0006 antes do código): o instalador precisa caber nos 250 MB
-com o Qt somado aos ~176 MB de numpy/scipy medidos na Fase 3. O `--smoke` pode reusar o
-`rodar(..., ao_abrir=..., laco_de_eventos=...)` da casca. A Fase 3b (relatório fechado) continua
+Mateus roda `docs/ROTEIRO-WINDOWS.md` na máquina Windows de teste com o instalador do CI; passou,
+a Fase 7 (corte do Tauri e tag `v0.2.0`) começa. A Fase 3b (relatório fechado) continua
 esperando a lista de perguntas do dono.

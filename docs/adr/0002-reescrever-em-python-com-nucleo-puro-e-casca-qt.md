@@ -94,7 +94,7 @@ trocada sem mexer no núcleo.
 | Legibilidade | `tests/arquitetura`: arquivo ≤ 400 linhas, função ≤ 40 | CI + pre-commit | Qualquer arquivo ou função acima |
 | Tipos | `mypy --strict src/` | CI | Qualquer erro |
 | Oráculo congelado | CI compara o PR com `main` em `src-tauri/`, `src/*.ts*`, `src/*.css`, `src/assets/`, `package*.json` | CI | Qualquer mudança (o oráculo mora em `ferramentas/oraculo_rust/`) |
-| Roda no Windows | Job `windows-latest`: `uv run pytest` (a partir da Fase 6, build + `--smoke`) | CI | Teste falha; instalador > 250 MB |
+| Roda no Windows | Job `windows-latest`: `uv run pytest`; job `instalador`: build + `--smoke` do instalado (ADR-0006) | CI | Teste falha; instalador > 250 MB ou `--smoke` > 8 s |
 
 Regra derivada no `AGENTS.md`: seção "Fronteiras (ADR-0002)".
 

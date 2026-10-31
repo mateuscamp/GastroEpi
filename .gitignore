@@ -57,6 +57,7 @@ __pycache__/
 coverage.xml
 build/
 *.spec
+!empacotamento/gastroepi.spec
 
 # Cofre do GastroEpi (ADR-0003): o arquivo de chave nunca vai para o repositório
 *.chave

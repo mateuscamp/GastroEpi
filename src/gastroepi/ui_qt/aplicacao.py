@@ -56,5 +56,11 @@ def rodar(
         return (laco_de_eventos or aplicacao.exec)()
 
 
+def processar_eventos() -> int:
+    """Laço de uma volta: desenha o que está pendente e devolve 0 (o `--smoke`)."""
+    QApplication.processEvents()
+    return 0
+
+
 def _caixa_de_erro(texto: str) -> None:
     QMessageBox.critical(None, "GastroEpi", texto)

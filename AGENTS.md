@@ -12,6 +12,9 @@ Arquitetura: monólito modular · Quantum: 1 executável, 1 banco. ADRs em `docs
 - Rodar: `uv run gastroepi` (cofre em `%LOCALAPPDATA%\GastroEpi`) e `uv run gastroepi demo` (fictícios
   com semente numa pasta temporária, já desbloqueado; a senha aparece no terminal).
 - Capturas das telas: `GASTROEPI_CAPTURAS=<pasta> uv run pytest tests/ui_qt`.
+- Congelar (ADR-0006): `uv run --group empacotamento pyinstaller --noconfirm empacotamento/gastroepi.spec`,
+  depois `dist/GastroEpi/GastroEpi --smoke`. Import que o congelado não acha entra em `hiddenimports`
+  no `.spec`, com o motivo; o `--smoke` do instalador no CI é o portão.
 
 Rodar `uv run poe check` antes de declarar qualquer tarefa concluída.
 
