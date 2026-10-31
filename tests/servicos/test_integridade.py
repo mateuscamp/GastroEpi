@@ -6,6 +6,7 @@ import sqlcipher3
 
 from gastroepi.cofre.recovery_key import ler_recovery_key
 from gastroepi.dominio.ficticios import gerar_fichas
+from gastroepi.dominio.listas import Indicacao
 from gastroepi.servicos import integridade, pacientes
 from gastroepi.servicos.acesso import NOME_DO_BANCO, criar_cofre, desbloquear
 
@@ -61,3 +62,28 @@ def test_pagina_corrompida_reprova_sem_tentar_ler_os_dados(tmp_path: Path) -> No
     assert not verificacao.ok
     assert len(verificacao.paginas_corrompidas) == 1
     assert verificacao.auditoria is None
+
+
+def test_uso_de_outro_por_campo(tmp_path: Path) -> None:
+    cofre_com_fichas(tmp_path, quantidade=60)
+
+    with desbloquear(tmp_path, SENHA) as sessao:
+        usos = {uso.campo: uso for uso in integridade.uso_de_outro(sessao)}
+
+    fichas = gerar_fichas(semente=9, quantidade=60)
+    exames = [e for f in fichas for e in f.exames]
+    lesoes = [x for e in exames for x in e.lesoes]
+    indicacao = usos["indicação"]
+    assert (indicacao.registros, indicacao.outros) == (
+        len(exames),
+        sum(e.indicacao is Indicacao.OUTRA for e in exames),
+    )
+    assert usos["histologia"].registros == len(lesoes)
+    assert usos["motivo de não intubação"].registros == sum(not e.intubacao_cecal for e in exames)
+
+
+def test_outro_acima_de_5_por_cento_e_acusado() -> None:
+    assert integridade.UsoDeOutro("histologia", 100, 6).acima_do_limite
+    assert not integridade.UsoDeOutro("histologia", 100, 5).acima_do_limite
+    assert integridade.UsoDeOutro("histologia", 0, 0).fracao is None
+    assert not integridade.UsoDeOutro("histologia", 0, 0).acima_do_limite

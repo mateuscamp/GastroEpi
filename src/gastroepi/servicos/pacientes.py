@@ -3,6 +3,8 @@
 `usuario` é quem opera o app (vai para a auditoria), não o examinador do exame.
 """
 
+import unicodedata
+
 from gastroepi.auditoria.cadeia import EntradaDeAuditoria
 from gastroepi.dominio.catalogo import ItemDeCatalogo
 from gastroepi.dominio.exame import Examinador
@@ -44,6 +46,37 @@ def buscar(sessao: Sessao, paciente_id: int) -> Ficha | None:
 
 def listar(sessao: Sessao) -> dict[int, Ficha]:
     return repositorio_de(sessao).listar()
+
+
+def buscar_por_prontuario(sessao: Sessao, prontuario: str) -> tuple[int, Ficha] | None:
+    """O prontuário é único; compara aparado, como o domínio grava."""
+    procurado = prontuario.strip()
+    for paciente_id, ficha in listar(sessao).items():
+        if ficha.paciente.prontuario == procurado:
+            return paciente_id, ficha
+    return None
+
+
+def _sem_acento(texto: str) -> str:
+    decomposto = unicodedata.normalize("NFD", texto.casefold())
+    return "".join(c for c in decomposto if not unicodedata.combining(c))
+
+
+def corresponde_ao_termo(ficha: Ficha, termo: str) -> bool:
+    """Busca da tela de pacientes: parte do nome (sem acento nem caixa), do prontuário
+    ou dos dígitos do CPF. Termo vazio aceita todos."""
+    procurado = _sem_acento(termo.strip())
+    if not procurado:
+        return True
+    paciente = ficha.paciente
+    if procurado in _sem_acento(paciente.nome) or procurado in paciente.prontuario.casefold():
+        return True
+    digitos = "".join(c for c in procurado if c.isdigit())
+    return bool(digitos) and paciente.cpf is not None and digitos in paciente.cpf
+
+
+def buscar_por_termo(sessao: Sessao, termo: str) -> dict[int, Ficha]:
+    return {i: f for i, f in listar(sessao).items() if corresponde_ao_termo(f, termo)}
 
 
 def adicionar_comorbidade(sessao: Sessao, item: ItemDeCatalogo, usuario: str) -> str:

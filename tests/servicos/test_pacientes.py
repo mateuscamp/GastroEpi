@@ -56,3 +56,45 @@ def test_catalogos(sessao: Sessao) -> None:
     assert pacientes.listar_comorbidades(sessao) == ("Asma",)
     assert pacientes.listar_sintomas(sessao) == ("Tenesmo",)
     assert pacientes.listar_examinadores(sessao) == (examinador,)
+
+
+def test_buscar_por_prontuario_aparado(sessao: Sessao) -> None:
+    primeira, segunda = gerar_fichas(semente=2, quantidade=2)
+    pacientes.cadastrar(sessao, primeira, usuario="teste")
+    segundo_id = pacientes.cadastrar(sessao, segunda, usuario="teste")
+
+    assert pacientes.buscar_por_prontuario(sessao, f" {segunda.paciente.prontuario} ") == (
+        segundo_id,
+        segunda,
+    )
+    assert pacientes.buscar_por_prontuario(sessao, "F99999") is None
+
+
+def test_buscar_por_termo_no_nome_sem_acento_no_prontuario_e_no_cpf(sessao: Sessao) -> None:
+    fichas = gerar_fichas(semente=2, quantidade=6)
+    for ficha in fichas:
+        pacientes.cadastrar(sessao, ficha, usuario="teste")
+    alvo = fichas[3].paciente
+    assert alvo.cpf is not None
+    sobrenome = alvo.nome.split()[-1].upper()
+    cpf_formatado = f"{alvo.cpf[:3]}.{alvo.cpf[3:6]}"
+
+    pelo_nome = pacientes.buscar_por_termo(sessao, sobrenome)
+    pelo_prontuario = pacientes.buscar_por_termo(sessao, alvo.prontuario.lower())
+    pelo_cpf = pacientes.buscar_por_termo(sessao, cpf_formatado)
+
+    assert alvo in {f.paciente for f in pelo_nome.values()}
+    assert [f.paciente for f in pelo_prontuario.values()] == [alvo]
+    assert alvo in {f.paciente for f in pelo_cpf.values()}
+    assert len(pacientes.buscar_por_termo(sessao, "  ")) == 6
+    assert pacientes.buscar_por_termo(sessao, "zzz") == {}
+
+
+def test_termo_acentuado_acha_nome_sem_acento() -> None:
+    ficha = gerar_fichas(semente=2, quantidade=1)[0]
+    nome = ficha.paciente.model_copy(update={"nome": "Lucia Fictícia"})
+    ficha = ficha.model_copy(update={"paciente": nome})
+
+    assert pacientes.corresponde_ao_termo(ficha, "lúcia")
+    assert pacientes.corresponde_ao_termo(ficha, "FICTICIA")
+    assert not pacientes.corresponde_ao_termo(ficha, "123")
